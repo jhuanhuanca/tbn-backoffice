@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+vendor/
+
+# Variables de entorno (MUY IMPORTANTE)
+.env
+
+# Laravel
+/storage/*.key
+/storage/app/*
+/storage/framework/*
+/storage/logs/*
+/public/storage
+
+# Builds
+dist/
+build/
+
+# Logs
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Archivos temporales
+*.tmp
+*.cache

@@ -1,0 +1,177 @@
+// =========================================================
+// * Argon Dashboard 2 Pro - v2.0.0
+// =========================================================
+//
+// * Product Page: https://www.creative-tim.com/product/argon-dashboard-pro
+// * Copyright 2021 Creative Tim (https://www.creative-tim.com)
+//
+// Coded by www.creative-tim.com
+//
+// =========================================================
+//
+// * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+// Bootstrap Functions
+@import "argon-dashboard/bootstrap/functions";
+
+// Custom Variables
+@import "argon-dashboard/custom/variables";
+
+// Theme Variables
+@import "argon-dashboard/variables";
+
+// Bootstrap Core
+@import "argon-dashboard/bootstrap/bootstrap";
+
+// Theme Core
+@import "argon-dashboard/theme-pro";
+
+// Custom Variables
+@import "argon-dashboard/custom/styles";
+
+// =========================================================
+// Mobile-first responsive (producción)
+// =========================================================
+
+html {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  position: relative;
+}
+#app,
+.g-sidenav-wrapper {
+  overflow-x: hidden;
+  max-width: 100%;
+  min-height: 100vh;
+}
+
+// Main content: flex y ancho limitado para no salirse de la pantalla
+.main-content {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+  box-sizing: border-box;
+}
+
+.main-content-inner {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.main-content-inner .container-fluid {
+  max-width: 100%;
+}
+.main-content-inner .table-responsive {
+  max-width: 100%;
+}
+.main-content-inner [class*="col-"],
+.main-content-inner .card {
+  min-width: 0;
+}
+
+// Backdrop overlay cuando el sidebar está abierto en móvil
+.sidenav-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+  transition: opacity 0.2s ease;
+}
+
+// Z-index: sidebar por encima del backdrop en móvil
+@media (max-width: 1199.98px) {
+  .sidenav {
+    z-index: 9999;
+    transition: transform 0.25s ease-out;
+  }
+}
+
+// ----- Móvil (< 1200px): sidebar oculto por defecto, ancho completo al abrir -----
+@media (max-width: 1199.98px) {
+  .sidenav.fixed-start + .main-content {
+    margin-left: 0 !important;
+  }
+  .g-sidenav-show.g-sidenav-hidden .sidenav {
+    transform: translateX(-100%);
+    visibility: hidden;
+  }
+  .g-sidenav-show.g-sidenav-pinned .sidenav {
+    transform: translateX(0);
+    visibility: visible;
+    max-width: min(15.625rem, 85vw) !important;
+    width: min(15.625rem, 85vw) !important;
+  }
+}
+
+// ----- Escritorio (≥ 1200px): margen y ancho para que nada se salga de la pantalla -----
+@media (min-width: 1200px) {
+  .sidenav.fixed-start + .main-content {
+    margin-left: 17.125rem;
+    width: calc(100% - 17.125rem) !important;
+    max-width: calc(100vw - 17.125rem) !important;
+  }
+  .g-sidenav-hidden .sidenav.fixed-start + .main-content {
+    margin-left: 7.5rem;
+    width: calc(100% - 7.5rem) !important;
+    max-width: calc(100vw - 7.5rem) !important;
+  }
+  .g-sidenav-hidden .sidenav:hover.fixed-start + .main-content {
+    margin-left: 17.125rem;
+    width: calc(100% - 17.125rem) !important;
+    max-width: calc(100vw - 17.125rem) !important;
+  }
+  .g-sidenav-wrapper.g-sidenav-pinned .main-content {
+    margin-left: 17.125rem !important;
+    width: calc(100% - 17.125rem) !important;
+    max-width: calc(100vw - 17.125rem) !important;
+  }
+  .g-sidenav-wrapper.g-sidenav-hidden .main-content {
+    margin-left: 7.5rem !important;
+    width: calc(100% - 7.5rem) !important;
+    max-width: calc(100vw - 7.5rem) !important;
+  }
+  .g-sidenav-wrapper.g-sidenav-hidden .sidenav:hover ~ .main-content {
+    margin-left: 17.125rem !important;
+    width: calc(100% - 17.125rem) !important;
+    max-width: calc(100vw - 17.125rem) !important;
+  }
+  .g-sidenav-wrapper.g-sidenav-pinned .sidenav {
+    max-width: 15.625rem !important;
+    width: 15.625rem !important;
+  }
+  .g-sidenav-wrapper.g-sidenav-pinned .sidenav .nav-link-text,
+  .g-sidenav-wrapper.g-sidenav-pinned .sidenav .sidenav-normal {
+    opacity: 1 !important;
+    width: auto !important;
+  }
+}
+
+// Navbar y contenido del dashboard: que no provoquen scroll horizontal
+.navbar-main {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.navbar-main .container-fluid {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+// Navbar toggler blanco en navbar oscuro (dashboard)
+.navbar-main .navbar-toggler .navbar-toggler-bar {
+  background: #fff;
+}
