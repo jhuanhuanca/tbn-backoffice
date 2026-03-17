@@ -1,0 +1,48 @@
+<-- base de datos ->
+<-USUARIOS->
+users
+- id
+- nombre
+- apellido
+- email
+- usuario
+- password
+- telefono
+- sponsor_id (patrocinador)
+- lado_binario
+- rango
+- estado
+- fecha_registro
+
+<--RED MULTINIVEL-->
+network
+- id
+- user_id
+- parent_id
+- lado (izq/der)
+- nivel
+
+<--COMISIONES-->
+- id
+- user_id
+- monto
+- tipo
+- fecha
+- estado
+
+<--PRODUCTOS-->
+products
+- id
+- nombre
+- precio
+- puntos
+- descripcion
+- estado
+
+<--PEDIDOS-->
+orders
+- id
+- user_id
+- total
+- estado
+- fecha

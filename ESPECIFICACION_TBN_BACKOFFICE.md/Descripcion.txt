@@ -1,0 +1,32 @@
+Sistema: Back Office Multinivel TBN LIVING 
+Tipo: MLM (Binario / Híbrido / etc.)
+Usuarios: Afiliados y Administradores
+Frontend: Vue.js
+Backend: Laravel API
+
+<--tipos de usuarios -->
+
+- Administrador
+- Afiliado
+- Cliente
+
+<-- ESTRUCTURA DEL MULTINIVEL-->
+
+Tipo de plan: Binario Híbrido
+Lados: Izquierda / Derecha 
+Patrocinador: Sí
+Rangos: Sí
+Bonos: Sí
+
+<-- MODULOS DEL SISTEMA-->
+- Autenticación
+- Registro de nuevos socios
+- Perfil de usuario (cuenta)
+- Red multinivel (red)
+- Finanzas / comisiones (ganancias)
+- billetra (ganancias)
+- Productos (compras)
+- facturas o compras realizadas (compras)
+- Pedidos (compras)
+- Historial
+
