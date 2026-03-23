@@ -54,11 +54,14 @@ const toggleConfigurator = () => store.commit("toggleConfigurator");
 const isPinned = computed(() => store.state.isPinned);
 const showSidenavOverlay = computed(() => isPinned.value && isMobile.value && showSidenav.value && layout.value === "default");
 
-const sidenavWrapperClass = computed(() => ({
-  "g-sidenav-show": true,
-  "g-sidenav-hidden": !isPinned.value,
-  "g-sidenav-pinned": isPinned.value,
-}));
+const sidenavWrapperClass = computed(() => {
+  const isDefaultLayout = layout.value === "default";
+  return {
+    "g-sidenav-show": isDefaultLayout,
+    "g-sidenav-hidden": isDefaultLayout && !isPinned.value,
+    "g-sidenav-pinned": isDefaultLayout && isPinned.value,
+  };
+});
 
 const navClasses = computed(() => ({
   "position-sticky bg-gradient-navbar left-auto top-2 z-index-sticky": isNavFixed.value,
@@ -99,7 +102,10 @@ onBeforeUnmount(() => {
     />
     <Sidenav v-if="showSidenav" />
 
-    <main class="main-content position-relative max-height-vh-100 h-100">
+    <main
+      class="main-content position-relative max-height-vh-100 h-100"
+      :class="{ 'landing-main-content': layout === 'landing' }"
+    >
       <Navbar :class="[navClasses]" v-if="showNavbar" />
       <div class="main-content-inner">
         <router-view />
@@ -120,3 +126,19 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
+
+<style scoped>
+.landing-main-content {
+  margin-left: 0 !important;
+  width: 100%;
+  max-width: 100%;
+}
+:deep(.main-content-inner) {
+ -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+:deep(.container-fluid) {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+</style>

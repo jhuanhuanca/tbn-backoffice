@@ -17,16 +17,37 @@ const router = useRouter();
 const body = document.getElementsByTagName("body")[0];
 
 const isScrolled = ref(false);
+const currentSection = ref("inicio");
+const sectionIds = ["inicio", "como-funciona", "plan-compensacion", "productos", "faq"];
 
 const navbarClasses = computed(() => {
   return [
-    "navbar navbar-expand-lg border-radius-0 top-0 z-index-3 py-2 bg-white shadow-sm navbar-light navbar-sticky",
+    "navbar navbar-expand-lg border-radius-0 top-0 z-index-3 py-2 bg-white shadow-sm navbar-light navbar-fixed",
   ];
 });
 
 function handleScroll() {
   isScrolled.value = window.scrollY > 50;
+  const offset = 140;
+  const scrollPoint = window.scrollY + offset;
+
+  for (const id of sectionIds) {
+    const section = document.getElementById(id);
+    if (!section) continue;
+
+    const top = section.offsetTop;
+    const bottom = top + section.offsetHeight;
+    if (scrollPoint >= top && scrollPoint < bottom) {
+      currentSection.value = id;
+      break;
+    }
+  }
 }
+
+const navLinkClass = (id) => [
+  "nav-link nav-link-icon me-2",
+  { active: currentSection.value === id },
+];
 
 const goSignin = () => {
   router.push("/signin");
@@ -55,6 +76,7 @@ onBeforeMount(() => {
 
 onMounted(() => {
   window.addEventListener("scroll", handleScroll, { passive: true });
+  handleScroll();
 });
 
 onBeforeUnmount(() => {
@@ -99,21 +121,21 @@ onUnmounted(() => {
         <div class="collapse navbar-collapse" id="navigation">
             <ul class="navbar-nav mx-auto">
             <li class="nav-item">
-              <a class="nav-link nav-link-icon me-2" href="#inicio">Inicio</a>
+              <a :class="navLinkClass('inicio')" href="#inicio">Inicio</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link nav-link-icon me-2" href="#como-funciona">Cómo funciona</a>
+              <a :class="navLinkClass('como-funciona')" href="#como-funciona">Cómo funciona</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link nav-link-icon me-2" href="#plan-compensacion"
+              <a :class="navLinkClass('plan-compensacion')" href="#plan-compensacion"
                 >Plan de compensación</a
               >
             </li>
             <li class="nav-item">
-              <a class="nav-link nav-link-icon me-2" href="#productos">Productos</a>
+              <a :class="navLinkClass('productos')" href="#productos">Productos</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link nav-link-icon me-2" href="#faq">FAQ</a>
+              <a :class="navLinkClass('faq')" href="#faq">FAQ</a>
             </li>
           </ul>
           <ul class="navbar-nav d-lg-flex align-items-lg-center">
@@ -902,11 +924,16 @@ onUnmounted(() => {
 .landing-page {
   background-color: #ffffff;
   overflow-x: hidden;
-  max-width: 100vw;
+  max-width: 100%;
   width: 100%;
+  margin: 0;
+  padding: 0;
+  padding-top: 68px;
 }
 .landing-page .container {
-  max-width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .binary-diagram {
@@ -948,10 +975,17 @@ onUnmounted(() => {
   height: 32px;
 }
 
-.navbar-sticky {
-  position: sticky;
+.navbar-fixed {
+  position: fixed;
+  left: 0;
+  width: 100%;
   top: 0;
-  z-index: 1030;
+  z-index: 1040;
+}
+
+.navbar .nav-link.active {
+  color: #2dce89 !important;
+  font-weight: 700;
 }
 </style>
 

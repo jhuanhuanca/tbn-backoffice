@@ -43,7 +43,7 @@ const closeMenu = () => {
 </script>
 <template>
   <nav
-    class="navbar navbar-main navbar-expand-lg px-2 px-lg-3 shadow-none border-radius-xl"
+    class="navbar navbar-main navbar-expand-lg px-2 px-lg-3 shadow-none border-radius-xl navbar-no-scroll"
     :class="isRTL ? 'top-0 position-sticky z-index-sticky' : ''"
     v-bind="$attrs"
     id="navbarBlur"
@@ -63,21 +63,7 @@ const closeMenu = () => {
           <i class="sidenav-toggler-line bg-white"></i>
         </div>
       </a>
-      <button
-        class="navbar-toggler shadow-none border-0 d-lg-none"
-        type="button"
-        data-bs-toggle="collapse"
-        data-bs-target="#navbar"
-        aria-controls="navbar"
-        aria-expanded="false"
-        aria-label="Abrir menú"
-      >
-        <span class="navbar-toggler-icon">
-          <span class="navbar-toggler-bar bar1"></span>
-          <span class="navbar-toggler-bar bar2"></span>
-          <span class="navbar-toggler-bar bar3"></span>
-        </span>
-      </button>
+      
       <breadcrumbs
         :current-page="currentRouteName"
         :current-directory="currentDirectory"
@@ -264,3 +250,16 @@ const closeMenu = () => {
     </div>
   </nav>
 </template>
+
+<style scoped>
+.navbar-no-scroll {
+  overflow: hidden !important;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.navbar-no-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+</style>
