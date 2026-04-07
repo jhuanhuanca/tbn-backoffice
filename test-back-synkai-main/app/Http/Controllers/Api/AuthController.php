@@ -12,7 +12,8 @@ class AuthController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required'
+            'password' => 'required',
+            'country_code' => ['nullable', 'string', 'size:2'],
         ]);
 
         if (!Auth::attempt($request->only('email', 'password'))) {
@@ -21,11 +22,27 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $token = $request->user()->createToken('token')->plainTextToken;
+        $user = $request->user();
+
+        if (! $user->hasVerifiedEmail()) {
+            Auth::logout();
+
+            return response()->json([
+                'message' => 'Debes confirmar tu correo electrónico. Revisa la bandeja de entrada o solicita un nuevo enlace.',
+                'code' => 'email_unverified',
+                'email' => $user->email,
+            ], 403);
+        }
+        if ($request->filled('country_code')) {
+            $user->country_code = strtoupper($request->country_code);
+            $user->save();
+        }
+
+        $token = $user->createToken('token')->plainTextToken;
 
         return response()->json([
             'token' => $token,
-            'user'  => $request->user()
+            'user' => $user->loadMissing('rank', 'sponsor', 'registrationPackage'),
         ]);
     }
 }

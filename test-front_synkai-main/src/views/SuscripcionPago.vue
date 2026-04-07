@@ -1,22 +1,28 @@
 <script setup>
-import { computed, onBeforeMount, onBeforeUnmount } from "vue";
-import { useRoute } from "vue-router";
+import { ref, computed, onBeforeMount, onBeforeUnmount, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { useStore } from "vuex";
-import PagoSuscripcionOptions from "@/views/components/PagoSuscripcionOptions.vue";
+import ArgonButton from "@/components/ArgonButton.vue";
+import { fetchPackages, createOrder, fetchProfile } from "@/services/me";
+import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
 
 const store = useStore();
-const route = useRoute();
+const router = useRouter();
 const body = document.getElementsByTagName("body")[0];
 
-const paquete = computed(() => {
-  const nombre = String(route.query?.paquete || "Paquete seleccionado");
-  const precio = String(route.query?.precio || "Bs. 0");
-  const pv = String(route.query?.pv || "");
-  return { nombre, precio, pv };
-});
+const packagesList = ref([]);
+const selectedId = ref("");
+const loading = ref(true);
+const checkoutLoading = ref(false);
+const err = ref("");
+const paymentMethod = ref("transferencia");
+const paymentOptions = REGISTRATION_PAYMENT_METHODS;
+
+const selectedPkg = computed(() =>
+  packagesList.value.find((p) => String(p.id) === String(selectedId.value))
+);
 
 onBeforeMount(() => {
-  // Página independiente (sin dashboard)
   store.state.hideConfigButton = true;
   store.state.showNavbar = false;
   store.state.showSidenav = false;
@@ -33,6 +39,51 @@ onBeforeUnmount(() => {
   store.state.layout = "default";
   body.classList.add("bg-gray-100");
 });
+
+onMounted(async () => {
+  loading.value = true;
+  err.value = "";
+  try {
+    const res = await fetchPackages();
+    packagesList.value = res.data || [];
+    if (packagesList.value.length) {
+      selectedId.value = String(packagesList.value[0].id);
+    }
+  } catch {
+    err.value = "No se pudieron cargar los paquetes. Intenta más tarde.";
+  } finally {
+    loading.value = false;
+  }
+});
+
+async function confirmarActivacion() {
+  err.value = "";
+  if (!selectedId.value) {
+    err.value = "Selecciona un paquete.";
+    return;
+  }
+  checkoutLoading.value = true;
+  try {
+    await createOrder({
+      tipo: "paquete",
+      items: [{ package_id: parseInt(selectedId.value, 10), cantidad: 1 }],
+    });
+    const u = await fetchProfile();
+    await store.dispatch("auth/setAuth", {
+      user: u,
+      token: localStorage.getItem("token"),
+    });
+    if (u.needs_binary_placement) {
+      router.push("/activacion-binaria");
+    } else {
+      router.push("/dashboard-default");
+    }
+  } catch (e) {
+    err.value = e.response?.data?.message || "No se pudo registrar el pedido.";
+  } finally {
+    checkoutLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -42,20 +93,49 @@ onBeforeUnmount(() => {
       <div class="container position-relative py-5">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
           <div class="text-white">
-            <h1 class="h3 font-weight-bolder mb-1">Pago de suscripción</h1>
+            <h1 class="h3 font-weight-bolder mb-1">Activación / suscripción</h1>
             <p class="text-sm opacity-90 mb-0">
-              Tarjeta, QR o efectivo. Elige el método y confirma tu activación.
+              Debes completar la compra de un paquete para acceder al panel. Elige método de pago de referencia y
+              confirma el pedido (simulación de pago en back office).
             </p>
           </div>
-          <router-link to="/welcom#productos" class="btn btn-sm btn-outline-light">
-            <i class="ni ni-bold-left me-1"></i>
-            Volver a paquetes
-          </router-link>
         </div>
 
         <div class="card border-0 shadow-lg rounded-3 overflow-hidden">
           <div class="card-body p-4 p-lg-5">
-            <PagoSuscripcionOptions :paquete="paquete" />
+            <div v-if="loading" class="text-muted">Cargando paquetes…</div>
+            <template v-else>
+              <p v-if="err" class="text-danger text-sm">{{ err }}</p>
+              <div class="mb-3">
+                <label class="form-label text-sm">Paquete de activación</label>
+                <select v-model="selectedId" class="form-select">
+                  <option v-for="p in packagesList" :key="p.id" :value="String(p.id)">
+                    {{ p.name }} — {{ p.pv_points }} PV — Bs. {{ p.price }}
+                  </option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label text-sm">Método de pago (referencia)</label>
+                <select v-model="paymentMethod" class="form-select">
+                  <option v-for="opt in paymentOptions" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="selectedPkg" class="alert alert-light border text-sm mb-3">
+                <strong>{{ selectedPkg.name }}</strong><br />
+                PV: {{ selectedPkg.pv_points }} · Precio: Bs. {{ selectedPkg.price }}
+              </div>
+              <argon-button
+                color="success"
+                variant="gradient"
+                class="w-100"
+                :disabled="checkoutLoading || !packagesList.length"
+                @click="confirmarActivacion"
+              >
+                {{ checkoutLoading ? "Procesando…" : "Confirmar pedido y activar" }}
+              </argon-button>
+            </template>
           </div>
         </div>
       </div>
@@ -64,12 +144,9 @@ onBeforeUnmount(() => {
     <footer class="py-4 footer-pay">
       <div class="container">
         <div class="row align-items-center">
-          <div class="col-md-6 text-center text-md-start text-sm text-muted">
-            Suscripción · Métodos de pago
-          </div>
+          <div class="col-md-6 text-center text-md-start text-sm text-muted">Activación obligatoria para el panel</div>
           <div class="col-md-6 text-center text-md-end mt-2 mt-md-0">
-            <router-link to="/signin" class="text-muted text-sm me-3">Iniciar sesión</router-link>
-            <router-link to="/" class="text-muted text-sm">Inicio</router-link>
+            <router-link to="/signin" class="text-muted text-sm">Iniciar sesión</router-link>
           </div>
         </div>
       </div>
@@ -92,4 +169,3 @@ onBeforeUnmount(() => {
   background: #ffffff;
 }
 </style>
-

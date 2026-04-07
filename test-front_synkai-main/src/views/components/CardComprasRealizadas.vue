@@ -1,224 +1,71 @@
 <template>
   <div class="container-fluid py-4">
-    <!-- Título y descripción -->
     <div class="row mb-4">
       <div class="col-12">
         <div class="card border-0 shadow">
-        <div class="p-4 card-body">
-          <h4 class="mb-2 text-dark font-weight-bolder">Resumen de compras</h4>
-          <p class="mb-0 text-sm text-secondary">
-            Visualiza el estado general de las compras realizadas en tu plataforma.
-          </p>
+          <div class="p-4 card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+              <h4 class="mb-1 text-dark font-weight-bolder">Mis pedidos</h4>
+              <p class="mb-0 text-sm text-secondary">Pedidos registrados en el back office.</p>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" :disabled="loading" @click="cargar">
+              Actualizar
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tarjetas de estado (estilo Argon Dashboard) -->
+    <div v-if="error" class="alert alert-warning text-white mb-3">{{ error }}</div>
+
     <div class="row">
-      <!-- Compras realizadas -->
       <div class="col-xl-3 col-sm-6 mb-4">
         <div class="card shadow-sm border-0">
           <div class="card-body">
-            <div class="row">
-              <div class="col-8">
-                <div class="text-uppercase text-muted text-xs font-weight-bold mb-1">
-                  Compras realizadas
-                </div>
-                <div class="h4 mb-0 font-weight-bold text-dark">
-                  {{ comprasRealizadas.toLocaleString() }}
-                </div>
-              </div>
-              <div class="col-4 text-end">
-                <div class="icon icon-shape bg-gradient-primary text-white rounded-circle shadow">
-                  <i class="ni ni-cart"></i>
-                </div>
-              </div>
-            </div>
-            <p class="mb-0 mt-3 text-sm text-success">
-              <i class="ni ni-bold-up me-1"></i>
-              <span class="font-weight-bold">{{ variacionRealizadas }}%</span>
-              vs. periodo anterior
-            </p>
+            <div class="text-uppercase text-muted text-xs font-weight-bold mb-1">Total pedidos</div>
+            <div class="h4 mb-0 font-weight-bold text-dark">{{ total }}</div>
           </div>
         </div>
       </div>
-
-      <!-- Compras enviadas -->
       <div class="col-xl-3 col-sm-6 mb-4">
         <div class="card shadow-sm border-0">
           <div class="card-body">
-            <div class="row">
-              <div class="col-8">
-                <div class="text-uppercase text-muted text-xs font-weight-bold mb-1">
-                  Compras enviadas
-                </div>
-                <div class="h4 mb-0 font-weight-bold text-dark">
-                  {{ comprasEnviadas.toLocaleString() }}
-                </div>
-              </div>
-              <div class="col-4 text-end">
-                <div class="icon icon-shape bg-gradient-success text-white rounded-circle shadow">
-                  <i class="ni ni-send"></i>
-                </div>
-              </div>
-            </div>
-            <p class="mb-0 mt-3 text-sm text-success">
-              <i class="ni ni-bold-up me-1"></i>
-              <span class="font-weight-bold">{{ variacionEnviadas }}%</span>
-              tasa de cumplimiento
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Compras por enviar -->
-      <div class="col-xl-3 col-sm-6 mb-4">
-        <div class="card shadow-sm border-0">
-          <div class="card-body">
-            <div class="row">
-              <div class="col-8">
-                <div class="text-uppercase text-muted text-xs font-weight-bold mb-1">
-                  Compras por enviar
-                </div>
-                <div class="h4 mb-0 font-weight-bold text-dark">
-                  {{ comprasPorEnviar.toLocaleString() }}
-                </div>
-              </div>
-              <div class="col-4 text-end">
-                <div class="icon icon-shape bg-gradient-warning text-white rounded-circle shadow">
-                  <i class="ni ni-delivery-fast"></i>
-                </div>
-              </div>
-            </div>
-            <p class="mb-0 mt-3 text-sm text-warning">
-              <i class="ni ni-watch-time me-1"></i>
-              Pendientes de despacho
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Compras por pagar -->
-      <div class="col-xl-3 col-sm-6 mb-4">
-        <div class="card shadow-sm border-0">
-          <div class="card-body">
-            <div class="row">
-              <div class="col-8">
-                <div class="text-uppercase text-muted text-xs font-weight-bold mb-1">
-                  Compras por pagar
-                </div>
-                <div class="h4 mb-0 font-weight-bold text-dark">
-                  {{ formatCurrency(comprasPorPagar) }}
-                </div>
-              </div>
-              <div class="col-4 text-end">
-                <div class="icon icon-shape bg-gradient-danger text-white rounded-circle shadow">
-                  <i class="ni ni-credit-card"></i>
-                </div>
-              </div>
-            </div>
-            <p class="mb-0 mt-3 text-sm text-danger">
-              <i class="ni ni-fat-remove me-1"></i>
-              Revisar facturas pendientes
-            </p>
+            <div class="text-uppercase text-muted text-xs font-weight-bold mb-1">Completados</div>
+            <div class="h4 mb-0 font-weight-bold text-dark">{{ completados }}</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tabla resumen (opcional, estilo Argon) -->
-    <div class="row mt-3">
+    <div class="row">
       <div class="col-12">
         <div class="card shadow-sm border-0">
-          <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
-            <div>
-              <h6 class="text-dark mb-1">Detalle rápido</h6>
-              <p class="text-xs text-muted mb-0">
-                Vista general de los últimos movimientos de compra.
-              </p>
-            </div>
-            <div class="btn-group btn-group-sm">
-              <button
-                type="button"
-                class="btn btn-outline-primary active"
-              >
-                Hoy
-              </button>
-              <button
-                type="button"
-                class="btn btn-outline-primary"
-              >
-                7 días
-              </button>
-              <button
-                type="button"
-                class="btn btn-outline-primary"
-              >
-                30 días
-              </button>
-            </div>
-          </div>
-          <div class="card-body px-3 py-3">
+          <div class="card-body px-0">
             <div class="table-responsive">
               <table class="table align-items-center mb-0">
                 <thead>
                   <tr>
-                    <th class="text-xs text-uppercase text-muted font-weight-bold">
-                      Tipo
-                    </th>
-                    <th class="text-xs text-uppercase text-muted font-weight-bold">
-                      Cantidad
-                    </th>
-                    <th class="text-xs text-uppercase text-muted font-weight-bold">
-                      Tendencia
-                    </th>
+                    <th class="text-xs text-uppercase text-muted font-weight-bold">ID</th>
+                    <th class="text-xs text-uppercase text-muted font-weight-bold">Tipo</th>
+                    <th class="text-xs text-uppercase text-muted font-weight-bold">Total</th>
+                    <th class="text-xs text-uppercase text-muted font-weight-bold">PV</th>
+                    <th class="text-xs text-uppercase text-muted font-weight-bold">Estado</th>
+                    <th class="text-xs text-uppercase text-muted font-weight-bold">Fecha</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
+                  <tr v-for="o in orders" :key="o.id">
+                    <td class="text-sm">#{{ o.id }}</td>
+                    <td class="text-sm">{{ o.tipo }}</td>
+                    <td class="text-sm">{{ formatBs(o.total) }}</td>
+                    <td class="text-sm">{{ o.total_pv }}</td>
                     <td class="text-sm">
-                      Compras realizadas
+                      <span class="badge bg-gradient-info text-white">{{ o.estado }}</span>
                     </td>
-                    <td class="text-sm font-weight-bold">
-                      {{ comprasRealizadas.toLocaleString() }}
-                    </td>
-                    <td class="text-sm text-success">
-                      +{{ variacionRealizadas }}%
-                    </td>
+                    <td class="text-xs text-muted">{{ formatFecha(o.created_at) }}</td>
                   </tr>
-                  <tr>
-                    <td class="text-sm">
-                      Compras enviadas
-                    </td>
-                    <td class="text-sm font-weight-bold">
-                      {{ comprasEnviadas.toLocaleString() }}
-                    </td>
-                    <td class="text-sm text-success">
-                      +{{ variacionEnviadas }}%
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="text-sm">
-                      Compras por enviar
-                    </td>
-                    <td class="text-sm font-weight-bold">
-                      {{ comprasPorEnviar.toLocaleString() }}
-                    </td>
-                    <td class="text-sm text-warning">
-                      En proceso
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="text-sm">
-                      Compras por pagar
-                    </td>
-                    <td class="text-sm font-weight-bold">
-                      {{ formatCurrency(comprasPorPagar) }}
-                    </td>
-                    <td class="text-sm text-danger">
-                      Pendiente
-                    </td>
+                  <tr v-if="!loading && orders.length === 0">
+                    <td colspan="6" class="text-center text-muted py-4">Sin pedidos.</td>
                   </tr>
                 </tbody>
               </table>
@@ -231,27 +78,66 @@
 </template>
 
 <script>
+import { fetchOrders } from "@/services/me";
+
 export default {
-  name: 'CardComprasRealizadas',
+  name: "CardComprasRealizadas",
   data() {
     return {
-      // Datos de ejemplo; aquí puedes conectar tu API o Vuex
-      comprasRealizadas: 1243,
-      comprasEnviadas: 980,
-      comprasPorEnviar: 263,
-      comprasPorPagar: 15230.75,
-      variacionRealizadas: 12.5,
-      variacionEnviadas: 8.3,
+      loading: false,
+      error: null,
+      orders: [],
     };
   },
+  computed: {
+    total() {
+      return this.orders.length;
+    },
+    completados() {
+      return this.orders.filter((o) => o.estado === "completado").length;
+    },
+  },
+  mounted() {
+    this.cargar();
+  },
   methods: {
-    formatCurrency(value) {
-      if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
-      return new Intl.NumberFormat("es-ES", {
+    formatBs(v) {
+      const n = Number(v);
+      if (Number.isNaN(n)) {
+        return "—";
+      }
+      return new Intl.NumberFormat("es-BO", {
         style: "currency",
-        currency: "USD",
+        currency: "BOB",
         minimumFractionDigits: 2,
-      }).format(Number(value));
+      }).format(n);
+    },
+    formatFecha(iso) {
+      if (!iso) {
+        return "—";
+      }
+      try {
+        return new Date(iso).toLocaleString("es-BO");
+      } catch {
+        return iso;
+      }
+    },
+    async cargar() {
+      if (!localStorage.getItem("token")) {
+        this.error = "Inicia sesión.";
+        return;
+      }
+      this.loading = true;
+      this.error = null;
+      try {
+        const page = await fetchOrders();
+        this.orders = page.data || [];
+      } catch {
+        this.error = "No se pudieron cargar los pedidos.";
+        this.orders = [];
+      } finally {
+        this.loading = false;
+      }
     },
   },
 };
@@ -261,38 +147,7 @@ export default {
 .card {
   border-radius: 1rem;
 }
-
-.icon-shape {
-  width: 3rem;
-  height: 3rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-}
-
-.bg-gradient-primary {
-  background: linear-gradient(87deg, #54b144 0, #3d8b35 100%) !important;
-}
-
-.bg-gradient-success {
-  background: linear-gradient(87deg, #54b144 0, #3d8b35 100%) !important;
-}
-
-.bg-gradient-warning {
-  background: linear-gradient(87deg, #c9a227 0, #b3891e 100%) !important;
-}
-
-.bg-gradient-danger {
-  background: linear-gradient(87deg, #c0392b 0, #a93226 100%) !important;
-}
-
-.table thead th {
-  border-bottom: 1px solid #e9ecef;
-}
-
-.table tbody tr + tr td {
-  border-top: 1px solid #f1f3f9;
+.bg-gradient-info {
+  background: linear-gradient(87deg, #3d8b7a 0, #2d6b5d 100%) !important;
 }
 </style>
-

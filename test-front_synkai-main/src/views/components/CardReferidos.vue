@@ -1,43 +1,96 @@
 <script setup>
-import { computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
+import { fetchReferrals } from "@/services/me";
 
-const referidos = [
-  { id: 1, nombre: "María García", email: "maria.garcia@email.com", fechaAlta: "15/01/2025", pierna: "left", volumen: "2,450 PV", estado: "Activo", rango: "Bronce", iniciales: "MG" },
-  { id: 2, nombre: "Carlos López", email: "carlos.lopez@email.com", fechaAlta: "22/01/2025", pierna: "right", volumen: "1,890 PV", estado: "Activo", rango: "Bronce", iniciales: "CL" },
-  { id: 3, nombre: "Ana Martínez", email: "ana.martinez@email.com", fechaAlta: "28/01/2025", pierna: "left", volumen: "3,120 PV", estado: "Activo", rango: "Plata", iniciales: "AM" },
-  { id: 4, nombre: "Pedro Sánchez", email: "pedro.sanchez@email.com", fechaAlta: "05/02/2025", pierna: "right", volumen: "980 PV", estado: "Inactivo", rango: "Bronce", iniciales: "PS" },
-  { id: 5, nombre: "Laura Fernández", email: "laura.fernandez@email.com", fechaAlta: "12/02/2025", pierna: "left", volumen: "4,200 PV", estado: "Activo", rango: "Oro", iniciales: "LF" },
-];
+const loading = ref(true);
+const error = ref("");
+const items = ref([]);
+const summary = ref({ total: 0, activos: 0, pendientes: 0, izquierda: 0, derecha: 0 });
 
-const referidosIzquierda = computed(() => referidos.filter((r) => r.pierna === "left"));
-const referidosDerecha = computed(() => referidos.filter((r) => r.pierna === "right"));
+onMounted(async () => {
+  loading.value = true;
+  error.value = "";
+  try {
+    const data = await fetchReferrals();
+    items.value = data.items || [];
+    summary.value = data.summary || summary.value;
+  } catch {
+    error.value = "No se pudieron cargar los referidos.";
+  } finally {
+    loading.value = false;
+  }
+});
 
-const stats = {
-  total: referidos.length,
-  izquierda: referidosIzquierda.value.length,
-  derecha: referidosDerecha.value.length,
-  activos: referidos.filter((r) => r.estado === "Activo").length,
-};
+function iniciales(nombre) {
+  const parts = String(nombre || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const a = parts[0]?.[0] || "U";
+  const b = parts[1]?.[0] || "";
+  return `${a}${b}`.toUpperCase();
+}
+
+function formatPv(v) {
+  if (v === null || v === undefined) return "—";
+  const n = Number(v);
+  if (Number.isNaN(n)) return "—";
+  return `${n.toLocaleString("es-BO", { maximumFractionDigits: 2 })} PV`;
+}
+
+function estadoLabel(status) {
+  if (status === "active") return "Activo";
+  if (status === "pending") return "Pendiente";
+  return status || "—";
+}
+
+const referidos = computed(() =>
+  items.value.map((r) => ({
+    id: r.id,
+    nombre: r.name,
+    email: r.email,
+    fechaAlta: r.fecha_alta,
+    pierna: r.pierna,
+    volumen: formatPv(r.monthly_qualifying_pv),
+    estado: estadoLabel(r.account_status),
+    rango: r.rank_name || "—",
+    iniciales: iniciales(r.name),
+  }))
+);
+
+const referidosIzquierda = computed(() => referidos.value.filter((r) => r.pierna === "left"));
+const referidosDerecha = computed(() => referidos.value.filter((r) => r.pierna === "right"));
+const sinPierna = computed(() => referidos.value.filter((r) => !r.pierna));
+
+const stats = computed(() => ({
+  total: summary.value.total ?? referidos.value.length,
+  izquierda: summary.value.izquierda ?? referidosIzquierda.value.length,
+  derecha: summary.value.derecha ?? referidosDerecha.value.length,
+  activos: summary.value.activos ?? referidos.value.filter((r) => r.estado === "Activo").length,
+}));
 </script>
 
 <template>
   <div class="py-4 container-fluid">
-    <!-- Encabezado -->
     <div class="row mb-4">
       <div class="col-12">
         <div class="card border-0 shadow">
           <div class="p-4 card-body">
             <h4 class="mb-2 text-dark font-weight-bolder">Referidos directos</h4>
             <p class="mb-0 text-sm text-secondary">
-              Consulta la información de cada referido directo y su posición en la estructura binaria (pierna izquierda o derecha).
+              Socios registrados con tu código de patrocinador (datos desde la base de datos).
+            </p>
+            <p v-if="error" class="text-danger text-sm mt-2 mb-0">{{ error }}</p>
+            <p v-else-if="loading" class="text-muted text-sm mt-2 mb-0">Cargando…</p>
+            <p v-if="sinPierna.length" class="text-warning text-xs mt-2 mb-0">
+              {{ sinPierna.length }} referido(s) sin pierna binaria asignada aún.
             </p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- KPIs -->
     <div class="row">
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
@@ -79,7 +132,7 @@ const stats = {
         <mini-statistics-card
           title="Activos"
           :value="String(stats.activos)"
-          description="<span class='text-sm font-weight-bolder text-warning'>Calificados</span> este mes"
+          description="<span class='text-sm font-weight-bolder text-warning'>Cuenta activa</span>"
           :icon="{
             component: 'ni ni-check-bold',
             background: 'bg-gradient-warning',
@@ -90,12 +143,11 @@ const stats = {
     </div>
 
     <div class="row mt-4">
-      <!-- Estructura binaria -->
       <div class="col-lg-5 col-12 mb-4 mb-lg-0">
         <div class="card h-100">
           <div class="p-3 pb-0 card-header">
             <h6 class="mb-0 font-weight-bolder">Estructura binaria</h6>
-            <p class="text-xs text-secondary mt-1 mb-0">Referidos directos por pierna (izquierda / derecha).</p>
+            <p class="text-xs text-secondary mt-1 mb-0">Referidos directos por pierna (si ya tienen colocación).</p>
           </div>
           <div class="p-3 card-body overflow-auto">
             <div class="referidos-tree">
@@ -119,9 +171,10 @@ const stats = {
                       <div class="avatar-ref rounded-circle d-flex align-items-center justify-content-center text-white text-xs font-weight-bolder bg-gradient-primary">
                         {{ ref.iniciales }}
                       </div>
-                      <span class="ref-name text-xs font-weight-bold">{{ ref.nombre.split(' ')[0] }}</span>
+                      <span class="ref-name text-xs font-weight-bold">{{ ref.nombre.split(" ")[0] }}</span>
                       <span class="ref-vol text-xxs text-secondary">{{ ref.volumen }}</span>
                     </div>
+                    <div v-if="referidosIzquierda.length === 0" class="text-xxs text-muted text-center">Nadie aún</div>
                   </div>
                 </div>
                 <div class="tree-branch right">
@@ -137,9 +190,10 @@ const stats = {
                       <div class="avatar-ref rounded-circle d-flex align-items-center justify-content-center text-white text-xs font-weight-bolder bg-gradient-success">
                         {{ ref.iniciales }}
                       </div>
-                      <span class="ref-name text-xs font-weight-bold">{{ ref.nombre.split(' ')[0] }}</span>
+                      <span class="ref-name text-xs font-weight-bold">{{ ref.nombre.split(" ")[0] }}</span>
                       <span class="ref-vol text-xxs text-secondary">{{ ref.volumen }}</span>
                     </div>
+                    <div v-if="referidosDerecha.length === 0" class="text-xxs text-muted text-center">Nadie aún</div>
                   </div>
                 </div>
               </div>
@@ -148,12 +202,11 @@ const stats = {
         </div>
       </div>
 
-      <!-- Tabla de referidos -->
       <div class="col-lg-7 col-12">
         <div class="card">
           <div class="p-3 pb-0 card-header">
             <h6 class="mb-0 font-weight-bolder">Información de referidos directos</h6>
-            <p class="text-xs text-secondary mt-1 mb-0">Detalle de cada referido: contacto, pierna, volumen y estado.</p>
+            <p class="text-xs text-secondary mt-1 mb-0">Detalle desde el registro MLM.</p>
           </div>
           <div class="table-responsive">
             <table class="table align-items-center mb-0">
@@ -162,7 +215,7 @@ const stats = {
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Referido</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Fecha alta</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Pierna</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Volumen</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">PV mes</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Rango</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Estado</th>
                 </tr>
@@ -173,7 +226,7 @@ const stats = {
                     <div class="d-flex px-2 py-1 align-items-center">
                       <div
                         class="avatar avatar-sm rounded-circle me-3 d-flex align-items-center justify-content-center text-white font-weight-bolder text-xs"
-                        :class="ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-success'"
+                        :class="ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'"
                       >
                         {{ ref.iniciales }}
                       </div>
@@ -187,7 +240,9 @@ const stats = {
                     <span class="text-xs font-weight-bold text-secondary">{{ ref.fechaAlta }}</span>
                   </td>
                   <td class="align-middle text-center">
+                    <span v-if="!ref.pierna" class="badge badge-sm bg-gradient-secondary">Sin asignar</span>
                     <span
+                      v-else
                       class="badge badge-sm"
                       :class="ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-success'"
                     >
@@ -216,7 +271,6 @@ const stats = {
       </div>
     </div>
 
-    <!-- Cards individuales (vista detalle) -->
     <div class="row mt-4">
       <div class="col-12">
         <h6 class="mb-3 font-weight-bolder text-dark">Detalle por referido</h6>
@@ -231,7 +285,7 @@ const stats = {
             <div class="d-flex align-items-center mb-3">
               <div
                 class="avatar avatar-lg rounded-circle me-3 d-flex align-items-center justify-content-center text-white font-weight-bolder"
-                :class="ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-success'"
+                :class="ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'"
               >
                 {{ ref.iniciales }}
               </div>
@@ -246,13 +300,15 @@ const stats = {
                 <p class="text-xxs text-secondary mb-0">Pierna</p>
                 <span
                   class="badge badge-sm mt-1"
-                  :class="ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-success'"
+                  :class="ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'"
                 >
-                  {{ ref.pierna === "left" ? "Izquierda" : "Derecha" }}
+                  {{
+                    ref.pierna === "left" ? "Izquierda" : ref.pierna === "right" ? "Derecha" : "Sin asignar"
+                  }}
                 </span>
               </div>
               <div class="col-4">
-                <p class="text-xxs text-secondary mb-0">Volumen</p>
+                <p class="text-xxs text-secondary mb-0">PV mes</p>
                 <p class="text-sm font-weight-bolder mb-0">{{ ref.volumen }}</p>
               </div>
               <div class="col-4">

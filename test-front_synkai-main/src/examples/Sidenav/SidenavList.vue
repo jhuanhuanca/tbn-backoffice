@@ -1,13 +1,28 @@
 <script setup>
 import { computed, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useStore } from "vuex";
+import api from "@/services/api";
+
+const route = useRoute();
+const router = useRouter();
+const isAdminRoute = computed(() => route.path.startsWith("/admin"));
+import { labelCountry } from "@/constants/latamCountries";
 
 const store = useStore();
 const isRTL = computed(() => store.state.isRTL);
+const canAccessAdmin = computed(() => store.getters["auth/canAccessAdmin"]);
+const authUser = computed(() => store.state.auth.user);
+const userInitials = computed(() => {
+  const n = authUser.value?.name || "";
+  const parts = n.trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] || "U";
+  const b = parts[1]?.[0] || "";
+  return `${a}${b}`.toUpperCase();
+});
+const countryLabel = computed(() => labelCountry(authUser.value?.country_code));
 
 const getRoute = () => {
-  const route = useRoute();
   const routeArr = route.path.split("/");
   return routeArr[1];
 };
@@ -25,12 +40,122 @@ function toggle(menu) {
   isOpen.value[menu] = !isOpen.value[menu];
 }
 
+const logoutLoading = ref(false);
+
+async function cerrarSesion() {
+  logoutLoading.value = true;
+  try {
+    await api.post("/logout");
+  } catch {
+    /* */
+  }
+  await store.dispatch("auth/logout");
+  logoutLoading.value = false;
+  router.push("/signin");
+}
+
 </script>
 
 <template>
   <div class="collapse navbar-collapse w-auto h-auto h-100" id="sidenav-collapse-main">
     <ul class="navbar-nav">
-      
+      <!-- Vista solo administración (sin menú de socio) -->
+      <template v-if="isAdminRoute && canAccessAdmin">
+        <li v-if="authUser" class="nav-item px-2 text-center border-bottom border-light pb-3 mb-2">
+          <router-link to="/cuenta" class="text-decoration-none d-block">
+            <div
+              class="avatar avatar-lg rounded-circle bg-gradient-primary mx-auto text-white d-flex align-items-center justify-content-center shadow-sm"
+              style="width: 56px; height: 56px; min-width: 56px; font-size: 1rem"
+            >
+              {{ userInitials }}
+            </div>
+            <div class="text-sm font-weight-bold text-dark mt-2 text-truncate">{{ authUser.name }}</div>
+            <div class="text-xs text-muted">#{{ authUser.member_code ?? "—" }}</div>
+            <div class="text-xs text-muted text-truncate">{{ countryLabel }}</div>
+            <div v-if="authUser?.mlm_role" class="text-xxs text-uppercase text-muted mt-1">
+              Rol: {{ authUser.mlm_role }}
+            </div>
+          </router-link>
+        </li>
+        <li class="nav-item">
+          <sidenav-item
+            to="/admin/dashboard"
+            :class="getRoute() === 'admin' ? 'active' : ''"
+            navText="Panel empresa"
+          >
+            <template v-slot:icon>
+              <i class="ni ni-settings-gear-65 text-danger text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
+          <sidenav-item to="/admin/retiros" navText="Retiros (gestión)">
+            <template v-slot:icon>
+              <i class="ni ni-money-coins text-warning text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
+          <sidenav-item to="/admin/reconciliacion" navText="Reconciliación">
+            <template v-slot:icon>
+              <i class="ni ni-chart-bar-32 text-info text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
+          <sidenav-item to="/admin/productos" navText="Productos (catálogo)">
+            <template v-slot:icon>
+              <i class="ni ni-box-2 text-primary text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
+          <sidenav-item to="/admin/paquetes" navText="Paquetes">
+            <template v-slot:icon>
+              <i class="ni ni-gift text-success text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item mt-2">
+          <router-link to="/dashboard-default" class="nav-link text-success">
+            <i class="ni ni-bold-left me-2"></i>
+            <span class="nav-link-text">Ir al panel de socio</span>
+          </router-link>
+        </li>
+        <li class="nav-item mt-3 pt-3 border-top border-light">
+          <router-link to="/cuenta" class="nav-link text-sm">
+            <i class="ni ni-settings-gear-65 text-secondary me-2"></i>
+            <span class="nav-link-text">Configuración</span>
+          </router-link>
+        </li>
+        <li class="nav-item">
+          <a
+            href="javascript:void(0)"
+            class="nav-link text-sm text-danger"
+            :class="{ 'opacity-50': logoutLoading }"
+            @click="cerrarSesion"
+          >
+            <i class="ni ni-key-25 text-danger me-2"></i>
+            <span class="nav-link-text">{{ logoutLoading ? "Cerrando…" : "Cerrar sesión" }}</span>
+          </a>
+        </li>
+      </template>
+
+      <template v-else>
+      <li v-if="authUser" class="nav-item px-2 text-center border-bottom border-light pb-3 mb-2">
+        <router-link to="/cuenta" class="text-decoration-none d-block">
+          <div
+            class="avatar avatar-lg rounded-circle bg-gradient-primary mx-auto text-white d-flex align-items-center justify-content-center shadow-sm"
+            style="width: 56px; height: 56px; min-width: 56px; font-size: 1rem"
+          >
+            {{ userInitials }}
+          </div>
+          <div class="text-sm font-weight-bold text-dark mt-2 text-truncate">{{ authUser.name }}</div>
+          <div class="text-xs text-muted">#{{ authUser.member_code ?? "—" }}</div>
+          <div class="text-xs text-muted text-truncate">{{ countryLabel }}</div>
+        </router-link>
+      </li>
+
       <!-- Dashboard -->
       <li class="nav-item">
         <sidenav-item
@@ -40,6 +165,18 @@ function toggle(menu) {
         >
           <template v-slot:icon>
             <i class="ni ni-tv-2 text-primary text-sm opacity-10"></i>
+          </template>
+        </sidenav-item>
+      </li>
+
+      <li v-if="canAccessAdmin" class="nav-item">
+        <sidenav-item
+          to="/admin/dashboard"
+          :class="getRoute() === 'admin' ? 'active' : ''"
+          :navText="isRTL ? 'لوحة الإدارة' : 'Panel empresa'"
+        >
+          <template v-slot:icon>
+            <i class="ni ni-settings-gear-65 text-danger text-sm opacity-10"></i>
           </template>
         </sidenav-item>
       </li>
@@ -164,67 +301,30 @@ function toggle(menu) {
 
       <!-- Mi Cuenta -->
       <li class="nav-item">
-  <router-link to="/cuenta" class="nav-link">
-    <i class="ni ni-single-02 text-primary me-2"></i>
-    <span class="nav-link-text ms-1">MI CUENTA</span>
-  </router-link>
-</li>
-   <!-- Sistema de Liderazgo -->
-      <li class="nav-item">
-        <a class="nav-link" href="javascript:void(0)" @click="toggle('Administracion')">
-          <i class="ni ni-compass-04 text-primary me-2"></i>
-          <span class="nav-link-text ms-1">Administracion</span>
-          <i :class="['ni', isOpen.Administracion ? 'ni-bold-down' : 'ni-bold-right', 'ms-auto']"></i>
-        </a>
-        <div class="collapse" :class="{ show: isOpen.Administracion }">
-          <ul class="nav ms-1">
-            <li class="nav-item">
-              <router-link to="/profile" class="nav-link">
-                <i class="ni ni-single-02 text-success"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Perfil</span>
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link to="/submod2" class="nav-link">
-                <i class="ni ni-chat-round text-info"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Contenido de Ventas</span>
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link to="/submod3" class="nav-link">
-                <i class="ni ni-check-bold text-warning"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Giones y presentaciones</span>
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link to="/submod4" class="nav-link">
-                <i class="ni ni-world-2 text-success"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Contenido de Accion</span>
-              </router-link>
-            </li>
-             <li class="nav-item">
-              <router-link to="/submod4" class="nav-link">
-                <i class="ni ni-world-2 text-success"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Contenido de Productos</span>
-              </router-link>
-            </li>
-             <li class="nav-item">
-              <router-link to="/submod4" class="nav-link">
-                <i class="ni ni-world-2 text-success"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Contenido de Biblioteca</span>
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link to="/submod4" class="nav-link">
-                <i class="ni ni-settings-gear-65 text-success"></i>
-                <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Configuracion</span>
-              </router-link>
-            </li>
-          </ul>
-        </div>
+        <router-link to="/cuenta" class="nav-link">
+          <i class="ni ni-single-02 text-primary me-2"></i>
+          <span class="nav-link-text ms-1">MI CUENTA</span>
+        </router-link>
       </li>
-      <!-- Resto de items fijos (billing, profile, signin, signup) -->
-      <!-- ... dejan igual ... -->
+
+      <li class="nav-item mt-3 pt-3 border-top border-light">
+        <router-link to="/cuenta" class="nav-link text-sm">
+          <i class="ni ni-settings-gear-65 text-secondary me-2"></i>
+          <span class="nav-link-text ms-1">Configuración</span>
+        </router-link>
+      </li>
+      <li class="nav-item">
+        <a
+          href="javascript:void(0)"
+          class="nav-link text-sm text-danger"
+          :class="{ 'opacity-50': logoutLoading }"
+          @click="cerrarSesion"
+        >
+          <i class="ni ni-key-25 text-danger me-2"></i>
+          <span class="nav-link-text ms-1">{{ logoutLoading ? "Cerrando…" : "Cerrar sesión" }}</span>
+        </a>
+      </li>
+      </template>
 
     </ul>
   </div>

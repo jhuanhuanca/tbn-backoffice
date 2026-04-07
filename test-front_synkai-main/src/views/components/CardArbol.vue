@@ -1,50 +1,94 @@
 <script setup>
+import { ref, computed, onMounted } from "vue";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 import DefaultInfoCard from "@/examples/Cards/DefaultInfoCard.vue";
+import BinaryTreeBranch from "./BinaryTreeBranch.vue";
+import { fetchBinaryTree } from "@/services/me";
 
-const treeStats = {
-  leftLeg: "12,450 PV",
-  rightLeg: "10,980 PV",
-  binaryEarnings: "$1,240.00",
-  levelEarnings: "$580.00",
-  currentLevel: "Nivel 5",
-  totalMembers: "127",
-};
+const loading = ref(true);
+const error = ref("");
+const payload = ref(null);
 
-const hybridPlanLevels = [
-  { level: 1, name: "Directos", binary: "10%", unilevel: "5%", match: "5%", total: "20%" },
-  { level: 2, name: "Segundo nivel", binary: "8%", unilevel: "4%", match: "4%", total: "16%" },
-  { level: 3, name: "Tercer nivel", binary: "6%", unilevel: "3%", match: "3%", total: "12%" },
-  { level: 4, name: "Cuarto nivel", binary: "4%", unilevel: "2%", match: "2%", total: "8%" },
-  { level: 5, name: "Quinto nivel", binary: "2%", unilevel: "1%", match: "1%", total: "4%" },
-];
+onMounted(async () => {
+  loading.value = true;
+  error.value = "";
+  try {
+    payload.value = await fetchBinaryTree();
+  } catch {
+    error.value = "No se pudo cargar el árbol binario. Inicia sesión e inténtalo de nuevo.";
+  } finally {
+    loading.value = false;
+  }
+});
+
+const tree = computed(() => payload.value?.tree);
+const stats = computed(() => payload.value?.stats || {});
+const birPct = computed(() => payload.value?.bir_percentages || { 1: 0.21, 2: 0.15, 3: 0.06 });
+
+const birRows = computed(() => {
+  const p = birPct.value;
+  return [
+    {
+      level: 1,
+      name: "Línea 1 (patrocinio directo)",
+      pct: `${Math.round((p[1] ?? 0.21) * 100)}%`,
+      note: "Bono inicio rápido (BIR)",
+    },
+    {
+      level: 2,
+      name: "Línea 2",
+      pct: `${Math.round((p[2] ?? 0.15) * 100)}%`,
+      note: "BIR",
+    },
+    {
+      level: 3,
+      name: "Línea 3",
+      pct: `${Math.round((p[3] ?? 0.06) * 100)}%`,
+      note: "BIR",
+    },
+  ];
+});
+
+function formatPv(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return "—";
+  return `${n.toLocaleString("es-BO", { maximumFractionDigits: 2 })} PV`;
+}
+
+function formatBs(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return "—";
+  return new Intl.NumberFormat("es-BO", {
+    style: "currency",
+    currency: "BOB",
+    minimumFractionDigits: 2,
+  }).format(n);
+}
 </script>
 
 <template>
   <div class="py-4 container-fluid">
-    <!-- Encabezado de página -->
     <div class="row mb-4">
       <div class="col-12">
         <div class="card border-0 shadow">
           <div class="p-4 card-body">
-            <h4 class="mb-2 text-dark font-weight-bolder">
-              Red de árbol binario · Plan binario híbrido
-            </h4>
+            <h4 class="mb-2 text-dark font-weight-bolder">Red de árbol binario</h4>
             <p class="mb-0 text-sm text-secondary">
-              Visualiza tu red multinivel, el equilibrio de piernas y las ganancias del plan de compensación binario híbrido (matching + bonos por nivel).
+              Datos en tiempo real desde tu posición en la red (volumen semanal, comisiones y estructura).
             </p>
+            <p v-if="error" class="text-danger text-sm mt-2 mb-0">{{ error }}</p>
+            <p v-else-if="loading" class="text-muted text-sm mt-2 mb-0">Cargando…</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- KPIs principales -->
     <div class="row">
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
           title="Pierna izquierda"
-          :value="treeStats.leftLeg"
-          description="<span class='text-sm font-weight-bolder text-primary'>Volumen</span> acumulado"
+          :value="formatPv(stats.left_pv)"
+          description="<span class='text-sm font-weight-bolder text-primary'>Volumen</span> semanal"
           :icon="{
             component: 'ni ni-bold-left',
             background: 'bg-gradient-primary',
@@ -55,8 +99,8 @@ const hybridPlanLevels = [
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
           title="Pierna derecha"
-          :value="treeStats.rightLeg"
-          description="<span class='text-sm font-weight-bolder text-info'>Volumen</span> acumulado"
+          :value="formatPv(stats.right_pv)"
+          description="<span class='text-sm font-weight-bolder text-info'>Volumen</span> semanal"
           :icon="{
             component: 'ni ni-bold-right',
             background: 'bg-gradient-info',
@@ -66,9 +110,9 @@ const hybridPlanLevels = [
       </div>
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
-          title="Ganancias binario"
-          :value="treeStats.binaryEarnings"
-          description="<span class='text-sm font-weight-bolder text-success'>Matching</span> del período"
+          title="Bono binario (semana)"
+          :value="formatBs(stats.binary_earnings_week)"
+          description="<span class='text-sm font-weight-bolder text-success'>Periodo</span> actual"
           :icon="{
             component: 'ni ni-money-coins',
             background: 'bg-gradient-success',
@@ -78,9 +122,9 @@ const hybridPlanLevels = [
       </div>
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
-          title="Ganancias multinivel"
-          :value="treeStats.levelEarnings"
-          description="<span class='text-sm font-weight-bolder text-warning'>Por niveles</span>"
+          title="BIR acumulado"
+          :value="formatBs(stats.bir_total)"
+          description="<span class='text-sm font-weight-bolder text-warning'>Inicio rápido</span>"
           :icon="{
             component: 'ni ni-chart-bar-32',
             background: 'bg-gradient-warning',
@@ -93,9 +137,9 @@ const hybridPlanLevels = [
     <div class="row mt-3">
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
-          title="Nivel actual"
-          :value="treeStats.currentLevel"
-          description="<span class='text-sm font-weight-bolder text-dark'>Profundidad</span> en la red"
+          title="Rango"
+          :value="stats.current_rank || '—'"
+          description="<span class='text-sm font-weight-bolder text-dark'>Tu rango</span>"
           :icon="{
             component: 'ni ni-world-2',
             background: 'bg-gradient-dark',
@@ -105,9 +149,9 @@ const hybridPlanLevels = [
       </div>
       <div class="col-lg-3 col-md-6 col-12">
         <mini-statistics-card
-          title="Miembros en red"
-          :value="treeStats.totalMembers"
-          description="<span class='text-sm font-weight-bolder text-secondary'>Total</span> en tu árbol"
+          title="Nodos en binario"
+          :value="String(stats.binary_network_count ?? 0)"
+          description="<span class='text-sm font-weight-bolder text-secondary'>Debajo de ti</span>"
           :icon="{
             component: 'ni ni-single-02',
             background: 'bg-gradient-secondary',
@@ -117,9 +161,9 @@ const hybridPlanLevels = [
       </div>
       <div class="col-lg-6 col-12 d-flex align-items-stretch">
         <default-info-card
-          title="Binario híbrido"
-          description="Combinación de compensación binaria (matching entre piernas) y bonos unilevel por niveles de profundidad."
-          value="Matching + Unilevel"
+          title="Residual unilevel"
+          description="Suma histórica de comisiones residuales registradas en tu cuenta."
+          :value="formatBs(stats.residual_total)"
           :icon="{
             component: 'ni ni-trophy',
             background: 'bg-gradient-success',
@@ -128,83 +172,69 @@ const hybridPlanLevels = [
       </div>
     </div>
 
-    <!-- Esquema visual del árbol binario -->
     <div class="row mt-4">
       <div class="col-lg-6 col-12 mb-4 mb-lg-0">
         <div class="card h-100">
           <div class="p-3 pb-0 card-header">
             <h6 class="mb-0 font-weight-bolder">Estructura del árbol binario</h6>
-            <p class="text-xs text-secondary mt-1 mb-0">Cada nodo tiene máximo 2 referidos directos (izquierda y derecha).</p>
+            <p class="text-xs text-secondary mt-1 mb-0">
+              Colocación según <code>binary_placements</code> (tu posición y dos niveles).
+            </p>
           </div>
           <div class="p-3 card-body overflow-auto">
-            <div class="tree-diagram">
-              <div class="tree-node root">
+            <div v-if="tree" class="tree-diagram">
+              <div class="tree-node root text-center mb-3">
                 <span class="node-badge bg-gradient-primary">Tú</span>
+                <div class="text-sm font-weight-bold mt-1">{{ tree.user?.name }}</div>
+                <div class="text-xxs text-muted">{{ tree.user?.member_code }}</div>
               </div>
               <div class="tree-connector"></div>
-              <div class="tree-children">
-                <div class="tree-branch left">
-                  <div class="tree-connector vertical"></div>
-                  <div class="tree-node">
-                    <span class="node-badge bg-gradient-primary">I1</span>
-                  </div>
-                  <div class="tree-connector small"></div>
-                  <div class="tree-grandchildren">
-                    <div class="tree-node small"><span class="node-badge bg-light text-dark">I2</span></div>
-                    <div class="tree-node small"><span class="node-badge bg-light text-dark">D2</span></div>
-                  </div>
+              <div class="tree-children d-flex justify-content-around gap-3 flex-wrap">
+                <div class="text-center flex-fill">
+                  <div class="text-xs text-primary font-weight-bolder mb-2">Izquierda</div>
+                  <BinaryTreeBranch v-if="tree.left" :branch="tree.left" />
+                  <span v-else class="text-xs text-muted">Sin colocación</span>
                 </div>
-                <div class="tree-branch right">
-                  <div class="tree-connector vertical"></div>
-                  <div class="tree-node">
-                    <span class="node-badge bg-gradient-info">D1</span>
-                  </div>
-                  <div class="tree-connector small"></div>
-                  <div class="tree-grandchildren">
-                    <div class="tree-node small"><span class="node-badge bg-light text-dark">I2</span></div>
-                    <div class="tree-node small"><span class="node-badge bg-light text-dark">D2</span></div>
-                  </div>
+                <div class="text-center flex-fill">
+                  <div class="text-xs text-success font-weight-bolder mb-2">Derecha</div>
+                  <BinaryTreeBranch v-if="tree.right" :branch="tree.right" />
+                  <span v-else class="text-xs text-muted">Sin colocación</span>
                 </div>
               </div>
             </div>
+            <p v-else class="text-sm text-muted mb-0">Sin datos de árbol.</p>
           </div>
         </div>
       </div>
 
-      <!-- Tabla plan binario híbrido -->
       <div class="col-lg-6 col-12">
         <div class="card h-100">
           <div class="p-3 pb-0 card-header">
-            <h6 class="mb-0 font-weight-bolder">Plan de compensación binario híbrido</h6>
-            <p class="text-xs text-secondary mt-1 mb-0">Porcentajes por nivel: matching binario + bono unilevel.</p>
+            <h6 class="mb-0 font-weight-bolder">Bono inicio rápido (BIR) por línea</h6>
+            <p class="text-xs text-secondary mt-1 mb-0">
+              Porcentajes sobre monto comisionable del paquete (configuración MLM).
+            </p>
           </div>
           <div class="table-responsive">
             <table class="table align-items-center mb-0">
               <thead>
                 <tr>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Nivel</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Binario</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Unilevel</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Match</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Total</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Línea</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">%</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Acumulado</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in hybridPlanLevels" :key="row.level">
+                <tr v-for="row in birRows" :key="row.level">
                   <td>
                     <span class="text-sm font-weight-bold">{{ row.name }}</span>
+                    <div class="text-xxs text-muted">{{ row.note }}</div>
                   </td>
                   <td class="align-middle text-center">
-                    <span class="badge badge-sm bg-gradient-primary">{{ row.binary }}</span>
+                    <span class="badge badge-sm bg-gradient-primary">{{ row.pct }}</span>
                   </td>
-                  <td class="align-middle text-center">
-                    <span class="badge badge-sm bg-gradient-info">{{ row.unilevel }}</span>
-                  </td>
-                  <td class="align-middle text-center">
-                    <span class="badge badge-sm bg-gradient-success">{{ row.match }}</span>
-                  </td>
-                  <td class="align-middle text-center">
-                    <span class="text-sm font-weight-bolder text-dark">{{ row.total }}</span>
+                  <td class="align-middle">
+                    <span class="text-sm font-weight-bolder">{{ formatBs(stats.bir_by_level?.[row.level]) }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -214,12 +244,11 @@ const hybridPlanLevels = [
       </div>
     </div>
 
-    <!-- Resumen explicativo -->
     <div class="row mt-4">
       <div class="col-12">
         <div class="card border-0 shadow-sm">
           <div class="p-4 card-body">
-            <h6 class="mb-3 font-weight-bolder text-dark">¿Cómo funciona el binario híbrido?</h6>
+            <h6 class="mb-3 font-weight-bolder text-dark">¿Cómo se calcula el binario y el BIR?</h6>
             <div class="row">
               <div class="col-md-4 mb-3 mb-md-0">
                 <div class="d-flex align-items-start">
@@ -228,7 +257,9 @@ const hybridPlanLevels = [
                   </div>
                   <div>
                     <span class="text-sm font-weight-bolder text-dark">Dos piernas</span>
-                    <p class="text-xs text-secondary mb-0">Izquierda y derecha. Las ventas se suman por pierna y se hace matching entre ambas.</p>
+                    <p class="text-xs text-secondary mb-0">
+                      El volumen PV se acumula por pierna según la colocación en la red.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -238,8 +269,10 @@ const hybridPlanLevels = [
                     <i class="ni ni-money-coins text-white opacity-10" aria-hidden="true"></i>
                   </div>
                   <div>
-                    <span class="text-sm font-weight-bolder text-dark">Matching binario</span>
-                    <p class="text-xs text-secondary mb-0">Ganas un porcentaje sobre el volumen matcheado (el menor entre ambas piernas) en cada ciclo.</p>
+                    <span class="text-sm font-weight-bolder text-dark">Bono binario</span>
+                    <p class="text-xs text-secondary mb-0">
+                      Comisiones tipo binario del periodo semanal mostradas arriba.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -249,8 +282,11 @@ const hybridPlanLevels = [
                     <i class="ni ni-chart-bar-32 text-white opacity-10" aria-hidden="true"></i>
                   </div>
                   <div>
-                    <span class="text-sm font-weight-bolder text-dark">Multinivel (unilevel)</span>
-                    <p class="text-xs text-secondary mb-0">Bonos por profundidad: ganas un % sobre las ventas de cada nivel debajo de ti en la red.</p>
+                    <span class="text-sm font-weight-bolder text-dark">BIR (3 líneas)</span>
+                    <p class="text-xs text-secondary mb-0">
+                      21 % / 15 % / 6 % sobre el comisionable del paquete en las primeras tres generaciones de
+                      patrocinio.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -275,17 +311,15 @@ const hybridPlanLevels = [
   height: 48px;
   border-radius: 50%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .tree-node.root {
-  width: 56px;
-  height: 56px;
-}
-.tree-node.small {
-  width: 36px;
-  height: 36px;
+  width: auto;
+  height: auto;
+  border-radius: 0;
 }
 .node-badge {
   font-size: 0.7rem;
@@ -297,38 +331,17 @@ const hybridPlanLevels = [
   display: inline-block;
   text-align: center;
 }
-.tree-node.small .node-badge {
-  font-size: 0.6rem;
-  padding: 0.15rem 0.3rem;
-  min-width: 1.5rem;
-}
 .tree-connector {
   width: 2px;
   height: 24px;
   background: linear-gradient(180deg, #5e72e4 0%, transparent 100%);
   margin: 0 auto;
 }
-.tree-connector.vertical {
-  height: 20px;
-  background: #dee2e6;
-}
-.tree-connector.small {
-  height: 12px;
-  background: #e9ecef;
-}
 .tree-children {
-  display: flex;
-  gap: 2rem;
+  width: 100%;
   margin-top: 0.25rem;
 }
-.tree-branch {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.tree-grandchildren {
-  display: flex;
-  gap: 1.5rem;
-  margin-top: 0.25rem;
+.text-xxs {
+  font-size: 0.65rem;
 }
 </style>

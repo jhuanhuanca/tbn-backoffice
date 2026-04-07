@@ -11,6 +11,9 @@ import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import ArgonButton from "@/components/ArgonButton.vue";
 import logo from "@/assets/img/synkailogo2.png";
+import { fetchPackages } from "@/services/me";
+import { STATIC_PACKAGES_CARDS } from "@/constants/landingStaticPackages";
+import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
 
 const store = useStore();
 const router = useRouter();
@@ -19,6 +22,19 @@ const body = document.getElementsByTagName("body")[0];
 const isScrolled = ref(false);
 const currentSection = ref("inicio");
 const sectionIds = ["inicio", "como-funciona", "plan-compensacion", "productos", "faq"];
+
+const packages = ref([]);
+const staticPackages = STATIC_PACKAGES_CARDS;
+const paymentMethods = REGISTRATION_PAYMENT_METHODS;
+
+async function loadPackages() {
+  try {
+    const res = await fetchPackages();
+    packages.value = res.data || [];
+  } catch {
+    packages.value = [];
+  }
+}
 
 const navbarClasses = computed(() => {
   return [
@@ -75,6 +91,7 @@ onBeforeMount(() => {
 });
 
 onMounted(() => {
+  loadPackages();
   window.addEventListener("scroll", handleScroll, { passive: true });
   handleScroll();
 });
@@ -527,59 +544,41 @@ onUnmounted(() => {
             </p>
           </div>
         </div>
+
+        <h5 class="text-center text-dark font-weight-bolder mb-4">Paquetes destacados</h5>
         <div class="row">
-          <div class="col-lg-4 col-md-6 mb-4">
-            <div class="card h-100 border-0 shadow-sm">
-              <div class="card-body p-4">
-                <h6 class="font-weight-bolder mb-1">Paquete Fundador</h6>
-                <p class="text-xs text-secondary mb-3">
-                  Ideal para comenzar. Acceso básico a la plataforma y plan de compensación.
-                </p>
-                <h5 class="mb-1 text-primary font-weight-bolder">Bs.10,800</h5>
-                <p class="text-xs text-secondary mb-3">1200 PV · 90 Productos</p>
-                <ul class="list-unstyled mb-4 text-xs text-secondary">
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Panel de afiliado</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Acceso a entrenamientos</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Bono directo y binario</li>
-                </ul>
-                <argon-button color="primary" variant="outline" full-width size="sm">
-                  <router-link
-                    :to="{
-                      path: '/suscripcion-pago',
-                      query: { paquete: 'Paquete Fundador', precio: 'Bs. 10,800', pv: '1200 PV · 90 Productos' },
-                    }"
-                    class="nav-link"
-                  >
-                    Elegir paquete
-                  </router-link>
-                </argon-button>
-              </div>
-            </div>
-          </div>
-          <div class="col-lg-4 col-md-6 mb-4">
-            <div class="card h-100 border-0 shadow-sm position-relative">
-              <span class="badge bg-gradient-success position-absolute top-0 end-0 m-3">
+          <div
+            v-for="card in staticPackages"
+            :key="card.slug"
+            class="col-lg-4 col-md-6 mb-4"
+          >
+            <div class="card h-100 border-0 shadow-sm" :class="{ 'position-relative': card.recommended }">
+              <span
+                v-if="card.recommended"
+                class="badge bg-gradient-success position-absolute top-0 end-0 m-3"
+              >
                 Recomendado
               </span>
               <div class="card-body p-4">
-                <h6 class="font-weight-bolder mb-1">Paquete Profesional</h6>
-                <p class="text-xs text-secondary mb-3">
-                  Para quienes desean construir un equipo sólido con mayores beneficios.
-                </p>
-                <h5 class="mb-1 text-success font-weight-bolder">Bs. 5,400</h5>
-                <p class="text-xs text-secondary mb-3">600 PV · 45 Productos</p>
+                <h6 class="font-weight-bolder mb-1">{{ card.name }}</h6>
+                <p class="text-xs text-secondary mb-3">{{ card.description }}</p>
+                <h5 class="mb-1 text-primary font-weight-bolder">{{ card.priceDisplay }}</h5>
+                <p class="text-xs text-secondary mb-3">{{ card.pvDisplay }}</p>
                 <ul class="list-unstyled mb-4 text-xs text-secondary">
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Todo del paquete inicial</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Bono de equipo mejorado</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Soporte prioritario</li>
+                  <li v-for="(f, fi) in card.features" :key="fi">
+                    <i class="ni ni-check-bold text-success me-1"></i>{{ f }}
+                  </li>
                 </ul>
-                <argon-button color="success" variant="gradient" full-width size="sm">
+                <argon-button
+                  :color="card.recommended ? 'success' : 'primary'"
+                  :variant="card.btnVariant"
+                  full-width
+                  size="sm"
+                >
                   <router-link
-                    :to="{
-                      path: '/suscripcion-pago',
-                      query: { paquete: 'Paquete Profesional', precio: 'Bs. 5,400', pv: '600 PV · 45 Productos' },
-                    }"
-                    class="nav-link text-white"
+                    :to="{ path: '/signup', query: { slug: card.slug } }"
+                    class="nav-link"
+                    :class="card.recommended ? 'text-white' : ''"
                   >
                     Elegir paquete
                   </router-link>
@@ -587,59 +586,70 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div class="col-lg-4 col-md-6 mb-4">
-            <div class="card h-100 border-0 shadow-sm">
+        </div>
+
+        <h5 class="text-center text-dark font-weight-bolder mb-4 mt-4">Catálogo en línea (base de datos)</h5>
+        <div class="row">
+          <div v-if="packages.length === 0" class="col-12 text-center text-secondary text-sm py-4">
+            Cargando paquetes desde el servidor…
+          </div>
+          <div
+            v-for="(p, idx) in packages"
+            :key="p.id"
+            class="col-lg-4 col-md-6 mb-4"
+          >
+            <div class="card h-100 border-0 shadow-sm" :class="{ 'position-relative': idx === 1 }">
+              <span
+                v-if="idx === 1"
+                class="badge bg-gradient-success position-absolute top-0 end-0 m-3"
+              >
+                Recomendado
+              </span>
               <div class="card-body p-4">
-                <h6 class="font-weight-bolder mb-1">Paquete Avanzado</h6>
+                <h6 class="font-weight-bolder mb-1">{{ p.name }}</h6>
                 <p class="text-xs text-secondary mb-3">
-                  Diseñado para líderes que quieren maximizar todos los bonos disponibles.
+                  Paquete de activación · datos desde la base de datos.
                 </p>
-                <h5 class="mb-1 text-dark font-weight-bolder">Bs. 2,700</h5>
-                <p class="text-xs text-secondary mb-3">300 PV · 20 Productos</p>
+                <h5 class="mb-1 text-primary font-weight-bolder">Bs. {{ p.price }}</h5>
+                <p class="text-xs text-secondary mb-3">{{ p.pv_points }} PV</p>
                 <ul class="list-unstyled mb-4 text-xs text-secondary">
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Acceso a bonos de liderazgo</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Sesiones de mentoría</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Herramientas adicionales</li>
+                  <li><i class="ni ni-check-bold text-success me-1"></i>Panel de afiliado</li>
+                  <li><i class="ni ni-check-bold text-success me-1"></i>BIR 21% / 15% / 6% (3 líneas)</li>
+                  <li><i class="ni ni-check-bold text-success me-1"></i>Binario y residual según reglas</li>
                 </ul>
-                <argon-button color="dark" variant="gradient" full-width size="sm">
+                <argon-button color="primary" variant="gradient" full-width size="sm">
                   <router-link
-                    :to="{
-                      path: '/suscripcion-pago',
-                      query: { paquete: 'Paquete Avanzado', precio: 'Bs. 2,700', pv: '300 PV · 20 Productos' },
-                    }"
+                    :to="{ path: '/signup', query: { package: String(p.id) } }"
                     class="nav-link text-white"
                   >
-                    Elegir paquete
+                    Inscribirme con este paquete
                   </router-link>
                 </argon-button>
               </div>
             </div>
           </div>
-          <div class="col-lg-4 col-md-6 mb-4">
-            <div class="card h-100 border-0 shadow-sm">
+        </div>
+
+        <div class="row mt-5">
+          <div class="col-lg-8 mx-auto">
+            <div class="card border-0 shadow-sm bg-gray-100">
               <div class="card-body p-4">
-                <h6 class="font-weight-bolder mb-1">Paquete Basico</h6>
-                <p class="text-xs text-secondary mb-3">
-                  Diseñado para líderes que quieren maximizar todos los bonos disponibles.
+                <h5 class="font-weight-bolder text-dark mb-3 text-center">Sistema de pago en inscripción</h5>
+                <p class="text-sm text-secondary text-center mb-4">
+                  Puedes indicar tu preferencia al registrarte; el equipo validará la activación según tu país.
                 </p>
-                <h5 class="mb-1 text-dark font-weight-bolder">Bs. 1,050</h5>
-                <p class="text-xs text-secondary mb-3">100 PV · 10 Productos</p>
-                <ul class="list-unstyled mb-4 text-xs text-secondary">
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Acceso a bonos de liderazgo</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Sesiones de mentoría</li>
-                  <li><i class="ni ni-check-bold text-success me-1"></i>Herramientas adicionales</li>
-                </ul>
-                <argon-button color="dark" variant="gradient" full-width size="sm">
-                  <router-link
-                    :to="{
-                      path: '/suscripcion-pago',
-                      query: { paquete: 'Paquete Basico', precio: 'Bs. 1,050', pv: '100 PV · 10 Productos' },
-                    }"
-                    class="nav-link text-white"
+                <div class="row g-3">
+                  <div
+                    v-for="pm in paymentMethods"
+                    :key="pm.value"
+                    class="col-md-6 col-lg-4"
                   >
-                    Elegir paquete
-                  </router-link>
-                </argon-button>
+                    <div class="d-flex align-items-center p-3 rounded-3 bg-white border shadow-sm h-100">
+                      <i class="ni ni-money-coins text-success text-lg me-3"></i>
+                      <span class="text-sm font-weight-bold text-dark">{{ pm.label }}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

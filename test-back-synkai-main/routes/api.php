@@ -1,47 +1,93 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\Admin\AdminCategoryController;
+use App\Http\Controllers\Api\Admin\AdminDashboardController;
+use App\Http\Controllers\Api\Admin\AdminLeadershipController;
+use App\Http\Controllers\Api\Admin\AdminPackageController;
+use App\Http\Controllers\Api\Admin\AdminProductController;
+use App\Http\Controllers\Api\Admin\AdminReconciliationController;
+use App\Http\Controllers\Api\Admin\AdminWithdrawalController;
 use App\Http\Controllers\Api\AuthController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use App\Models\User;
+use App\Http\Controllers\Api\AuthRegisterController;
+use App\Http\Controllers\Api\BinaryPlacementController;
+use App\Http\Controllers\Api\BinaryPlacementSelfController;
+use App\Http\Controllers\Api\MeController;
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PackageCatalogController;
+use App\Http\Controllers\Api\ProductCatalogController;
+use App\Http\Controllers\Api\SponsorLookupController;
+use App\Http\Controllers\Api\WalletController;
+use App\Http\Controllers\Api\WithdrawalController;
 use App\Http\Controllers\ProspectosController;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthRegisterController::class, 'register']);
 
-Route::post('/register', function (Request $request) {
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'email' => 'required|email|unique:users,email',
-        'password' => 'required|string|min:6|confirmed',
-    ]);
-
-    $user = User::create([
-        'name' => $request->name,
-        'email' => $request->email,
-        'password' => Hash::make($request->password),
-    ]);
-
-    // Crear token
-    $token = $user->createToken('auth_token')->plainTextToken;
+Route::post('/email/resend-verification', function (Request $request) {
+    $request->validate(['email' => ['required', 'email']]);
+    $user = \App\Models\User::query()->where('email', $request->email)->first();
+    if ($user && ! $user->hasVerifiedEmail()) {
+        $user->sendEmailVerificationNotification();
+    }
 
     return response()->json([
-        'user' => $user,
-        'token' => $token
+        'message' => 'Si el correo existe y aún no está verificado, te enviamos un enlace.',
     ]);
 });
 
+Route::get('/public/sponsors/{code}', [SponsorLookupController::class, 'show'])
+    ->where('code', '[A-Za-z0-9._-]+');
+
+Route::get('/packages', [PackageCatalogController::class, 'index']);
 
 Route::apiResource('prospectos', ProspectosController::class);
 
-Route::post('/logout', function (Request $request) {
-    Auth::guard('web')->logout();
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/me/binary-placement', [BinaryPlacementSelfController::class, 'store']);
 
-    $request->session()->invalidate();
-    $request->session()->regenerateToken();
+    Route::get('/me', [MeController::class, 'profile']);
+    Route::get('/me/dashboard', [MeController::class, 'dashboard']);
+    Route::get('/me/referrals', [MeController::class, 'referrals']);
+    Route::get('/me/commissions', [MeController::class, 'commissions']);
+    Route::get('/me/binary-tree', [MeController::class, 'binaryTree']);
+
+    Route::get('/wallet/balance', [WalletController::class, 'balance']);
+    Route::get('/wallet/transactions', [WalletController::class, 'transactions']);
+
+    Route::get('/products', [ProductCatalogController::class, 'index']);
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::post('/orders', [OrderController::class, 'store']);
+    Route::post('/withdrawals', [WithdrawalController::class, 'store']);
+
+    Route::middleware('mlm.admin')->prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminDashboardController::class, 'index']);
+        Route::get('/withdrawals', [AdminWithdrawalController::class, 'index']);
+        Route::post('/withdrawals/{withdrawal}/approve', [AdminWithdrawalController::class, 'approve']);
+        Route::post('/withdrawals/{withdrawal}/reject', [AdminWithdrawalController::class, 'reject']);
+        Route::post('/binary-placement', [BinaryPlacementController::class, 'store']);
+        Route::get('/reconciliation/period-closures', [AdminReconciliationController::class, 'periodClosures']);
+        Route::get('/reconciliation/commission-summary', [AdminReconciliationController::class, 'commissionSummary']);
+        Route::get('/leadership/{monthKey}', [AdminLeadershipController::class, 'show'])
+            ->where('monthKey', '[0-9]{4}-[0-9]{2}');
+
+        Route::get('/categories', [AdminCategoryController::class, 'index']);
+        Route::get('/products', [AdminProductController::class, 'index']);
+        Route::post('/products', [AdminProductController::class, 'store']);
+        Route::put('/products/{product}', [AdminProductController::class, 'update']);
+        Route::delete('/products/{product}', [AdminProductController::class, 'destroy']);
+        Route::get('/packages', [AdminPackageController::class, 'index']);
+        Route::post('/packages', [AdminPackageController::class, 'store']);
+        Route::put('/packages/{package}', [AdminPackageController::class, 'update']);
+        Route::delete('/packages/{package}', [AdminPackageController::class, 'destroy']);
+    });
+});
+
+Route::post('/logout', function (Request $request) {
+    $request->user()->currentAccessToken()->delete();
 
     return response()->json([
-        'message' => 'Sesión cerrada correctamente'
+        'message' => 'Sesión cerrada correctamente',
     ]);
 })->middleware('auth:sanctum');

@@ -1,4 +1,6 @@
 <script setup>
+defineEmits(["update:checked", "change"]);
+
 defineProps({
   name: {
     type: String,
@@ -31,6 +33,7 @@ defineProps({
       type="checkbox"
       :name="name"
       :checked="checked"
+      @change="$emit('change', $event)"
     />
     <label class="form-check-label" :class="labelClass" :for="id">
       <slot />

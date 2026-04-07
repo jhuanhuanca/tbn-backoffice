@@ -2,47 +2,169 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Auth\Notifications\VerifyEmail as VerifyEmailNotification;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Services\MemberCodeService;
 use Laravel\Sanctum\HasApiTokens;
-class User extends Authenticatable
-{
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens,HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+class User extends Authenticatable implements MustVerifyEmail
+{
+    use HasApiTokens, HasFactory, Notifiable;
+
     protected $fillable = [
         'name',
         'email',
         'password',
+        'referral_code',
+        'document_id',
+        'phone',
+        'birth_date',
+        'sponsor_id',
+        'mlm_role',
+        'account_status',
+        'is_mlm_qualified',
+        'last_qualification_month',
+        'monthly_qualifying_pv',
+        'rank_id',
+        'member_code',
+        'country_code',
+        'registration_package_id',
+        'preferred_payment_method',
+        'activation_paid_at',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
+    protected $appends = [
+        'can_access_admin_panel',
+        'needs_activation_subscription',
+        'needs_binary_placement',
+    ];
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'birth_date' => 'date',
+            'is_mlm_qualified' => 'boolean',
+            'monthly_qualifying_pv' => 'decimal:2',
+            'activation_paid_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            if ($user->member_code !== null && $user->referral_code !== null) {
+                return;
+            }
+            app(MemberCodeService::class)->assignToNewUser($user);
+        });
+    }
+
+    public function sponsor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sponsor_id');
+    }
+
+    public function referrals(): HasMany
+    {
+        return $this->hasMany(User::class, 'sponsor_id');
+    }
+
+    public function rank(): BelongsTo
+    {
+        return $this->belongsTo(Rank::class);
+    }
+
+    public function wallet(): HasOne
+    {
+        return $this->hasOne(Wallet::class);
+    }
+
+    public function binaryPlacement(): HasOne
+    {
+        return $this->hasOne(BinaryPlacement::class, 'user_id');
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function withdrawals(): HasMany
+    {
+        return $this->hasMany(Withdrawal::class);
+    }
+
+    public function registrationPackage(): BelongsTo
+    {
+        return $this->belongsTo(Package::class, 'registration_package_id');
+    }
+
+    /** Incluye roles listados en `mlm.admin_roles` (p. ej. admin, superadmin, support). */
+    public function canAccessAdminPanel(): bool
+    {
+        return in_array($this->mlm_role ?? '', config('mlm.admin_roles', ['admin', 'superadmin', 'support']), true);
+    }
+
+    protected function getCanAccessAdminPanelAttribute(): bool
+    {
+        return $this->canAccessAdminPanel();
+    }
+
+    /** Miembro sin pago de activación (pedido con paquete completado). */
+    protected function getNeedsActivationSubscriptionAttribute(): bool
+    {
+        if ($this->canAccessAdminPanel()) {
+            return false;
+        }
+
+        return $this->activation_paid_at === null;
+    }
+
+    /** Tras activar, elegir pierna bajo el patrocinador en el binario. */
+    protected function getNeedsBinaryPlacementAttribute(): bool
+    {
+        if ($this->canAccessAdminPanel() || ! $this->sponsor_id) {
+            return false;
+        }
+        if ($this->activation_paid_at === null) {
+            return false;
+        }
+
+        return ! $this->binaryPlacement()->exists();
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return $this->email_verified_at !== null;
+    }
+
+    public function markEmailAsVerified(): bool
+    {
+        return $this->forceFill([
+            'email_verified_at' => $this->freshTimestamp(),
+        ])->save();
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new VerifyEmailNotification);
+    }
+
+    public function getEmailForVerification(): string
+    {
+        return (string) $this->email;
     }
 }

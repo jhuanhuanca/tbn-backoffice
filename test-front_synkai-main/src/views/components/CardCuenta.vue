@@ -35,8 +35,10 @@
                 <span class="fw-bold">{{ initials(perfil.nombre) }}</span>
               </div>
               <div class="flex-grow-1">
-                <div class="fw-semibold text-dark">{{ perfil.nombre }}</div>
+                <div class="fw-semibold text-dark">{{ perfil.nombre || "—" }}</div>
                 <div class="text-xs text-muted text-truncate">{{ perfil.email }}</div>
+                <div v-if="perfil.member_code" class="text-xxs text-success mt-1">Código: {{ perfil.member_code }}</div>
+                <div v-if="perfil.country_label" class="text-xxs text-muted">{{ perfil.country_label }}</div>
               </div>
             </div>
 
@@ -229,9 +231,9 @@
               <div class="col-md-6">
                 <label class="form-label text-sm">Moneda preferida</label>
                 <select v-model="wallet.moneda" class="form-select">
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="MXN">MXN</option>
+                  <option v-for="m in latamMonedas" :key="m.value" :value="m.value">
+                    {{ m.label }}
+                  </option>
                 </select>
               </div>
 
@@ -450,17 +452,42 @@
 </template>
 
 <script>
+import { fetchProfile } from "@/services/me";
+import { labelCountry } from "@/constants/latamCountries";
+
+const LATAM_MONEDAS = [
+  { value: "BOB", label: "Boliviano (BOB)" },
+  { value: "ARS", label: "Peso argentino (ARS)" },
+  { value: "BRL", label: "Real (BRL)" },
+  { value: "CLP", label: "Peso chileno (CLP)" },
+  { value: "COP", label: "Peso colombiano (COP)" },
+  { value: "CRC", label: "Colón costarricense (CRC)" },
+  { value: "USD", label: "Dólar estadounidense (USD)" },
+  { value: "EUR", label: "Euro (EUR)" },
+  { value: "GTQ", label: "Quetzal (GTQ)" },
+  { value: "HNL", label: "Lempira (HNL)" },
+  { value: "MXN", label: "Peso mexicano (MXN)" },
+  { value: "PAB", label: "Balboa (PAB)" },
+  { value: "PEN", label: "Sol (PEN)" },
+  { value: "PYG", label: "Guaraní (PYG)" },
+  { value: "UYU", label: "Peso uruguayo (UYU)" },
+  { value: "VES", label: "Bolívar (VES)" },
+  { value: "DOP", label: "Peso dominicano (DOP)" },
+  { value: "NIO", label: "Córdoba (NIO)" },
+];
+
 export default {
   name: "CardCuenta",
   data() {
     return {
-      // DEMO (reemplazar por API / store)
       perfil: {
-        nombre: "Carlos Pérez",
-        username: "carlos",
-        email: "carlos@correo.com",
-        telefono: "+52 55 0000 0000",
-        bio: "Emprendedor. Construyendo mi red multinivel.",
+        nombre: "",
+        username: "",
+        email: "",
+        telefono: "",
+        bio: "",
+        member_code: "",
+        country_label: "",
       },
       perfilInitial: null,
       password: {
@@ -470,7 +497,7 @@ export default {
       },
       wallet: {
         metodo: "USDT",
-        moneda: "USD",
+        moneda: "BOB",
         direccion: "",
         banco: "",
         titular: "",
@@ -481,10 +508,7 @@ export default {
       twofa: {
         enabled: false,
       },
-      tickets: [
-        { id: 1, codigo: "SUP-1042", asunto: "Validación de retiro", categoria: "BILLETERA", fecha: "Mar 10", estado: "En proceso" },
-        { id: 2, codigo: "SUP-1031", asunto: "Cambio de email", categoria: "CUENTA", fecha: "Mar 02", estado: "Resuelto" },
-      ],
+      tickets: [],
       newTicketOpen: false,
       ticketDraft: {
         asunto: "",
@@ -493,6 +517,7 @@ export default {
         mensaje: "",
       },
       lastUpdated: "",
+      latamMonedas: LATAM_MONEDAS,
     };
   },
   computed: {
@@ -546,7 +571,43 @@ export default {
     this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
     this.lastUpdated = this.nowLabel();
   },
+  async mounted() {
+    await this.loadProfileFromApi();
+  },
   methods: {
+    labelCountry,
+    async loadProfileFromApi() {
+      if (!localStorage.getItem("token")) return;
+      try {
+        const u = await fetchProfile();
+        this.perfil = {
+          nombre: u.name || "",
+          username: (u.email && u.email.split("@")[0]) || "",
+          email: u.email || "",
+          telefono: u.phone || "",
+          bio: this.perfil.bio || "",
+          member_code: u.member_code != null ? String(u.member_code) : "",
+          country_label: labelCountry(u.country_code),
+        };
+        this.perfilInitial = JSON.parse(JSON.stringify(this.perfil));
+        const uid = u.id;
+        if (uid) {
+          try {
+            const raw = localStorage.getItem(`wallet_prefs_${uid}`);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              this.wallet = { ...this.wallet, ...parsed };
+              this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        this.lastUpdated = this.nowLabel();
+      } catch {
+        /* sesión inválida */
+      }
+    },
     nowLabel() {
       const d = new Date();
       return d.toLocaleString("es-ES", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -599,6 +660,14 @@ export default {
     // Wallet
     saveWallet() {
       this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
+      const uid = this.$store.state.auth.user?.id;
+      if (uid) {
+        try {
+          localStorage.setItem(`wallet_prefs_${uid}`, JSON.stringify(this.wallet));
+        } catch {
+          /* */
+        }
+      }
       this.lastUpdated = this.nowLabel();
     },
     resetWallet() {

@@ -1,4 +1,5 @@
 import { createStore } from "vuex";
+import auth from "./modules/auth";
 
 const XL_BREAKPOINT = 1200;
 
@@ -8,6 +9,9 @@ function getInitialPinned() {
 }
 
 export default createStore({
+  modules: {
+    auth,
+  },
   state: {
     hideConfigButton: false,
     isPinned: getInitialPinned(),
@@ -49,6 +53,9 @@ export default createStore({
   actions: {
     toggleSidebarColor({ commit }, payload) {
       commit("sidebarType", payload);
+    },
+    logout({ dispatch }) {
+      dispatch("auth/logout");
     },
   },
   getters: {},
