@@ -8,6 +8,7 @@ use App\Models\BinaryWeeklyCarry;
 use App\Models\Order;
 use App\Models\OrderBinaryVolumeApplied;
 use App\Models\PeriodClosure;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -70,7 +71,8 @@ class BinaryService
             return;
         }
 
-        $pv = (string) $order->total_pv;
+        $order->loadMissing('items');
+        $pv = $order->commissionablePvTotal();
         if (bccomp($pv, '0', 2) !== 1) {
             return;
         }
@@ -118,6 +120,9 @@ class BinaryService
         $closure->update(['status' => 'running', 'started_at' => now()]);
 
         $prevKey = $this->previousWeekKey($weekKey);
+        $legacyFlat = (bool) config('mlm.binary.legacy_flat', false);
+        $bobPerPv = (string) config('mlm.binary.bob_per_pv', config('mlm.pv_value.bob_per_pv', '9'));
+        $binaryRate = (string) config('mlm.binary.matched_pv_commission_rate', '0.21');
         $payoutPerPv = (string) config('mlm.binary.payout_per_matched_pv', '1');
 
         $parentIdsVol = BinaryLegVolumeWeekly::query()
@@ -150,7 +155,11 @@ class BinaryService
             $outL = bcsub($effL, $paidVol, 4);
             $outR = bcsub($effR, $paidVol, 4);
 
-            $payout = bcmul($paidVol, $payoutPerPv, 4);
+            if ($legacyFlat) {
+                $payout = bcmul($paidVol, $payoutPerPv, 4);
+            } else {
+                $payout = bcmul(bcmul($paidVol, $bobPerPv, 4), $binaryRate, 4);
+            }
             $payout = bcadd($payout, '0', 2);
 
             BinaryWeeklyCarry::query()->updateOrCreate(
@@ -199,5 +208,83 @@ class BinaryService
             ->first();
 
         return $row ? (string) $row->volume_pv : '0';
+    }
+
+    /**
+     * Primer hueco libre (izquierda antes que derecha) en amplitud bajo el patrocinador.
+     */
+    public function placeUserInFirstFreeSlot(User $user): ?BinaryPlacement
+    {
+        if ($user->binaryPlacement()->exists()) {
+            return $user->binaryPlacement;
+        }
+        if (! $user->sponsor_id) {
+            return null;
+        }
+
+        $slot = $this->findFirstFreeSlotUnder((int) $user->sponsor_id);
+        if ($slot === null) {
+            return null;
+        }
+
+        $placement = BinaryPlacement::query()->create([
+            'user_id' => $user->id,
+            'parent_user_id' => $slot['parent_user_id'],
+            'leg_position' => $slot['leg_position'],
+        ]);
+
+        $this->olvidarCacheArbol($user->id);
+        $this->olvidarCacheArbol((int) $slot['parent_user_id']);
+
+        return $placement;
+    }
+
+    /**
+     * @return array{parent_user_id:int, leg_position:string}|null
+     */
+    protected function findFirstFreeSlotUnder(int $rootSponsorId): ?array
+    {
+        $queue = [$rootSponsorId];
+        $seen = [];
+
+        while ($queue !== []) {
+            $p = array_shift($queue);
+            if (isset($seen[$p])) {
+                continue;
+            }
+            $seen[$p] = true;
+
+            if (! $this->legOccupied($p, BinaryPlacement::LEG_LEFT)) {
+                return ['parent_user_id' => $p, 'leg_position' => BinaryPlacement::LEG_LEFT];
+            }
+            if (! $this->legOccupied($p, BinaryPlacement::LEG_RIGHT)) {
+                return ['parent_user_id' => $p, 'leg_position' => BinaryPlacement::LEG_RIGHT];
+            }
+
+            $leftId = BinaryPlacement::query()
+                ->where('parent_user_id', $p)
+                ->where('leg_position', BinaryPlacement::LEG_LEFT)
+                ->value('user_id');
+            $rightId = BinaryPlacement::query()
+                ->where('parent_user_id', $p)
+                ->where('leg_position', BinaryPlacement::LEG_RIGHT)
+                ->value('user_id');
+            if ($leftId) {
+                $queue[] = (int) $leftId;
+            }
+            if ($rightId) {
+                $queue[] = (int) $rightId;
+            }
+        }
+
+        return null;
+    }
+
+    protected function legOccupied(int $parentUserId, string $leg): bool
+    {
+        return BinaryPlacement::query()
+            ->where('parent_user_id', $parentUserId)
+            ->where('leg_position', $leg)
+            ->exists();
     }
 }

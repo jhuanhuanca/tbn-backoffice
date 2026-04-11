@@ -89,6 +89,13 @@ async function cerrarSesion() {
           </sidenav-item>
         </li>
         <li class="nav-item">
+          <sidenav-item to="/admin/pedidos" navText="Pedidos / pagos">
+            <template v-slot:icon>
+              <i class="ni ni-cart text-secondary text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
           <sidenav-item to="/admin/retiros" navText="Retiros (gestión)">
             <template v-slot:icon>
               <i class="ni ni-money-coins text-warning text-sm opacity-10"></i>

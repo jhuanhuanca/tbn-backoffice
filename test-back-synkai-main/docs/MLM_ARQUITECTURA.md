@@ -25,11 +25,11 @@ Se unificó la identidad en la tabla `users` (se eliminó la duplicación con `u
 
 ## Backend
 
-- **Config** `config/mlm.php`: BIR (21/15/6 %), binario (`payout_per_matched_pv`), residual por generación, colas, activación 200 PV, **roles** (`member`, `admin`, `support`) y **`admin_roles`** (quién entra al prefijo `/api/admin`, configurable con `MLM_ADMIN_ROLES`, por defecto `admin`).
-- **Servicios**: `CommissionService`, `BinaryService`, `WalletService`, `WithdrawalService`, `UserQualificationService`, **`LeadershipService`** (agregados mensuales de eventos `type = leadership` en `commission_events`).
+- **Config** `config/mlm.php`: BIR sobre PV × BOB/PV, binario (21 % sobre PV emparejado × BOB/PV o modo legacy `payout_per_matched_pv`), residual por matriz de rango, colas, ciclo de calificación, **roles** y **`admin_roles`**. Detalle operativo: **`docs/MLM_SISTEMA_COMPLETO.md`**.
+- **Servicios**: `OrderService` (factura + encolado MLM), `InvoiceService`, `CommissionService`, `BinaryService`, `BinaryTreeService`, `MlmBonusProgressService`, `WalletService`, `WithdrawalService`, `UserQualificationService`, `LeadershipStreakService` (extensión), **`LeadershipService`** (reportes).
 - **Autorización**: **Policies** `WithdrawalPolicy`, `BinaryPlacementPolicy` (`approve` / `reject` / `viewAny` / `create`) usando `User::canAccessAdminPanel()` (alineado con `mlm.admin_roles`).
 - **Middleware** `mlm.admin` (`EnsureMlmRole`): sin parámetro usa `config('mlm.admin_roles')`.
-- **Eventos**: `OrderCompleted` → listener en cola → `ProcessOrderMlmAccrualsJob` (BIR, residual por pedido, volumen binario, calificación mensual). `UserActivated` al cruzar el umbral de PV.
+- **Eventos**: `OrderCompleted` → listener en cola → `OrderService::procesarOrdenFinalizada` (factura idempotente + `ProcessOrderMlmAccrualsJob`: BIR, residual, volumen binario, calificación). `UserActivated` al cruzar el umbral de PV.
 - **Jobs**: `CalculateBinaryCommissionsJob`, `ProcessResidualCommissionsJob`, `ProcessWithdrawalsJob`.
 - **Scheduler** (`bootstrap/app.php`): domingo 03:00 cierre binario semana anterior; día 1 04:00 cierre mensual (auditoría residual).
 - **Comandos**: `mlm:close-weekly-binary`, `mlm:close-monthly-residual`.

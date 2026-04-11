@@ -15,11 +15,16 @@ const selectedId = ref("");
 const loading = ref(true);
 const checkoutLoading = ref(false);
 const err = ref("");
-const paymentMethod = ref("transferencia");
+const infoMsg = ref("");
+const paymentMethod = ref("tarjeta");
 const paymentOptions = REGISTRATION_PAYMENT_METHODS;
 
 const selectedPkg = computed(() =>
   packagesList.value.find((p) => String(p.id) === String(selectedId.value))
+);
+
+const paymentSettlement = computed(() =>
+  ["tarjeta", "online"].includes(paymentMethod.value) ? "immediate" : "manual"
 );
 
 onBeforeMount(() => {
@@ -58,21 +63,29 @@ onMounted(async () => {
 
 async function confirmarActivacion() {
   err.value = "";
+  infoMsg.value = "";
   if (!selectedId.value) {
     err.value = "Selecciona un paquete.";
     return;
   }
   checkoutLoading.value = true;
   try {
-    await createOrder({
+    const order = await createOrder({
       tipo: "paquete",
       items: [{ package_id: parseInt(selectedId.value, 10), cantidad: 1 }],
+      payment_settlement: paymentSettlement.value,
+      payment_method: paymentMethod.value,
     });
     const u = await fetchProfile();
     await store.dispatch("auth/setAuth", {
       user: u,
       token: localStorage.getItem("token"),
     });
+    if (order?.estado === "pendiente_pago") {
+      infoMsg.value =
+        "Pedido registrado como pendiente de pago. Cuando la empresa confirme (efectivo, QR, transferencia), se activará tu cuenta.";
+      return;
+    }
     if (u.needs_binary_placement) {
       router.push("/activacion-binaria");
     } else {
@@ -106,6 +119,7 @@ async function confirmarActivacion() {
             <div v-if="loading" class="text-muted">Cargando paquetes…</div>
             <template v-else>
               <p v-if="err" class="text-danger text-sm">{{ err }}</p>
+              <p v-if="infoMsg" class="text-success text-sm">{{ infoMsg }}</p>
               <div class="mb-3">
                 <label class="form-label text-sm">Paquete de activación</label>
                 <select v-model="selectedId" class="form-select">

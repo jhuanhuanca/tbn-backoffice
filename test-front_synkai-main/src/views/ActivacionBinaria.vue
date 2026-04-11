@@ -24,11 +24,11 @@ onMounted(async () => {
   }
 });
 
-async function elegir(leg) {
+async function confirmarColocacion() {
   err.value = "";
   loading.value = true;
   try {
-    await postBinaryPlacement(leg);
+    await postBinaryPlacement();
     const u = await fetchProfile();
     await store.dispatch("auth/setAuth", {
       user: u,
@@ -51,9 +51,10 @@ async function elegir(leg) {
           <div class="card-body p-4 text-center">
             <h4 class="mb-2">Colocación en el binario</h4>
             <p class="text-sm text-secondary mb-4">
-              Tu activación está registrada. Elige si entras en la pierna
-              <strong>izquierda</strong> o <strong>derecha</strong> de tu patrocinador
-              <span v-if="sponsor">({{ sponsor.name }})</span>.
+              Tu activación está registrada. El sistema te colocará en el
+              <strong>primer espacio libre</strong> del binario bajo tu patrocinador (recorriendo izquierda antes
+              que derecha y el árbol en amplitud si hace falta).
+              <span v-if="sponsor">Patrocinador: {{ sponsor.name }}.</span>
             </p>
             <p v-if="err" class="text-danger text-sm">{{ err }}</p>
             <div class="d-flex flex-wrap justify-content-center gap-3 mt-4">
@@ -63,19 +64,9 @@ async function elegir(leg) {
                 size="lg"
                 :disabled="loading"
                 class="px-5"
-                @click="elegir('left')"
+                @click="confirmarColocacion"
               >
-                Pierna izquierda
-              </argon-button>
-              <argon-button
-                color="info"
-                variant="gradient"
-                size="lg"
-                :disabled="loading"
-                class="px-5"
-                @click="elegir('right')"
-              >
-                Pierna derecha
+                Colocarme automáticamente
               </argon-button>
             </div>
           </div>

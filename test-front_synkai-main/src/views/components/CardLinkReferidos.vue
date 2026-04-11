@@ -135,9 +135,16 @@
               <li class="mb-2">El prospecto abrirá el formulario de inscripción con tu código.</li>
               <li>Tras registrarse, aparecerá en la tabla de referidos directos.</li>
             </ol>
-            <router-link to="/signup" class="btn btn-outline-success btn-sm mt-3 w-100">
+            <router-link
+              v-if="miCodigo"
+              :to="{ name: 'Signup', query: { sponsor: miCodigo } }"
+              class="btn btn-outline-success btn-sm mt-3 w-100"
+            >
               Ver formulario de registro
             </router-link>
+            <span v-else class="btn btn-outline-secondary btn-sm mt-3 w-100 disabled opacity-50">
+              Sin código de socio
+            </span>
           </div>
         </div>
       </div>
@@ -147,6 +154,7 @@
 
 <script>
 import { mapState } from "vuex";
+import router from "@/router";
 import { fetchReferrals } from "@/services/me";
 
 export default {
@@ -169,8 +177,14 @@ export default {
       if (!code) {
         return "";
       }
-      const base = window.location.origin + (process.env.BASE_URL || "/").replace(/\/$/, "");
-      return `${base}/i/${encodeURIComponent(code)}`;
+      const href = router.resolve({
+        name: "Invite",
+        params: { sponsorCode: code },
+      }).href;
+      if (href.startsWith("http")) {
+        return href;
+      }
+      return `${window.location.origin}${href}`;
     },
   },
   mounted() {

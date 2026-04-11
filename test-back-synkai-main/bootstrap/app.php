@@ -2,6 +2,7 @@
 
 use App\Jobs\CalculateBinaryCommissionsJob;
 use App\Jobs\ProcessResidualCommissionsJob;
+use App\Services\RankService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -36,5 +37,9 @@ return Application::configure(basePath: dirname(__DIR__))
             $monthKey = now()->subMonth()->format('Y-m');
             ProcessResidualCommissionsJob::dispatch($monthKey);
         })->monthlyOn(1, '04:00');
+
+        $schedule->call(function () {
+            app(RankService::class)->reevaluarTodosLosRangos();
+        })->monthlyOn(2, '05:00');
     })
     ->create();

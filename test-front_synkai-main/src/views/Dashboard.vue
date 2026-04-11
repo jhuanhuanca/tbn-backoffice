@@ -5,7 +5,8 @@ import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 import GradientLineChart from "@/examples/Charts/GradientLineChart.vue";
 import Carousel from "./components/Carousel.vue";
 import CategoriesList from "./components/CategoriesList.vue";
-import { fetchDashboard } from "@/services/me";
+import { fetchDashboard, fetchProfile } from "@/services/me";
+import { useMlmLiveRefresh } from "@/composables/useMlmLiveRefresh";
 
 const store = useStore();
 const loading = ref(true);
@@ -38,6 +39,31 @@ function formatPv(v) {
   return `${n.toLocaleString("es-BO")} PV`;
 }
 
+function formatUsd(value) {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+  const n = Number(value);
+  if (Number.isNaN(n)) {
+    return String(value);
+  }
+  return new Intl.NumberFormat("es-BO", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  }).format(n);
+}
+
+const plataBanner = computed(() => dashboard.value?.bonus_progress?.plata_onboarding ?? null);
+
+const progressRank = computed(() => dashboard.value?.bonus_progress?.progress_bars?.rank_ascent ?? null);
+
+const progressAutoOkm = computed(() => dashboard.value?.bonus_progress?.progress_bars?.auto_okm ?? null);
+
+const progressPlataWindow = computed(
+  () => dashboard.value?.bonus_progress?.progress_bars?.plata_window ?? null,
+);
+
 const user = computed(() => store.state.auth.user);
 
 const kpis = computed(() => {
@@ -49,6 +75,8 @@ const kpis = computed(() => {
   const act =
     d?.user?.is_mlm_qualified || user.value?.is_mlm_qualified ? "Calificado" : "Pendiente";
 
+  const pvRaw = d?.user?.monthly_qualifying_pv ?? user.value?.monthly_qualifying_pv;
+
   return {
     availableBalance: loading.value ? "…" : formatBs(w),
     dailyEarnings: "—",
@@ -58,6 +86,7 @@ const kpis = computed(() => {
     currentRank: rankName,
     directAffiliates: String(rc),
     activityStatus: act,
+    monthlyPvDisplay: loading.value ? "…" : formatPv(pvRaw),
   };
 });
 
@@ -140,6 +169,21 @@ const categoriesList = computed(() => [
   },
 ]);
 
+async function refreshDashboardSilent() {
+  try {
+    const [data, prof] = await Promise.all([fetchDashboard(), fetchProfile()]);
+    dashboard.value = data;
+    await store.dispatch("auth/setAuth", {
+      user: prof,
+      token: localStorage.getItem("token"),
+    });
+  } catch {
+    /* mantiene último snapshot */
+  }
+}
+
+useMlmLiveRefresh(refreshDashboardSilent, 15000);
+
 onMounted(async () => {
   if (!localStorage.getItem("token")) {
     loadError.value = "Inicia sesión para ver tu panel.";
@@ -151,6 +195,11 @@ onMounted(async () => {
   try {
     const data = await fetchDashboard();
     dashboard.value = data;
+    const prof = await fetchProfile();
+    await store.dispatch("auth/setAuth", {
+      user: prof,
+      token: localStorage.getItem("token"),
+    });
   } catch {
     loadError.value = "No se pudo cargar el panel. Verifica el servidor y tu sesión.";
     dashboard.value = null;
@@ -163,6 +212,63 @@ onMounted(async () => {
   <div class="py-4 container-fluid">
     <div v-if="loadError" class="alert alert-warning text-white mb-3" role="alert">
       {{ loadError }}
+    </div>
+    <div
+      v-if="plataBanner?.show"
+      class="alert alert-info text-white mb-3"
+      role="alert"
+    >
+      <strong class="text-white">{{ plataBanner.title }}</strong>
+      <p class="mb-0 mt-2 text-sm text-white opacity-9">
+        {{ plataBanner.message }}
+      </p>
+    </div>
+    <div v-if="progressRank && progressAutoOkm" class="card mb-4">
+      <div class="card-body">
+        <h6 class="text-uppercase text-secondary text-xs font-weight-bolder mb-3">
+          Progreso de carrera y bonos
+        </h6>
+        <p class="text-sm mb-1">{{ progressRank.label }}</p>
+        <p class="text-xs text-muted mb-1">{{ progressRank.subtitle }}</p>
+        <div class="progress mb-4" style="height: 12px">
+          <div
+            class="progress-bar bg-gradient-success"
+            role="progressbar"
+            :style="{ width: Math.min(100, progressRank.percent || 0) + '%' }"
+            :aria-valuenow="progressRank.percent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          />
+        </div>
+        <p class="text-sm mb-1">{{ progressAutoOkm.label }}</p>
+        <p class="text-xs text-muted mb-1">
+          Acumulado ≈ {{ formatUsd(progressAutoOkm.earned_usd) }} de
+          {{ formatUsd(progressAutoOkm.target_usd) }}
+          (comisiones en BOB: {{ formatBs(progressAutoOkm.earned_bob) }} · tipo
+          {{ progressAutoOkm.bob_per_usd }} BOB/USD)
+        </p>
+        <div class="progress mb-0" style="height: 12px">
+          <div
+            class="progress-bar bg-gradient-warning"
+            role="progressbar"
+            :style="{ width: Math.min(100, progressAutoOkm.percent || 0) + '%' }"
+            :aria-valuenow="progressAutoOkm.percent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          />
+        </div>
+        <template v-if="plataBanner?.show && progressPlataWindow">
+          <p class="text-sm mb-1 mt-4">{{ progressPlataWindow.label }}</p>
+          <p class="text-xs text-muted mb-1">{{ progressPlataWindow.subtitle }}</p>
+          <div class="progress" style="height: 10px">
+            <div
+              class="progress-bar bg-gradient-info"
+              role="progressbar"
+              :style="{ width: Math.min(100, progressPlataWindow.percent || 0) + '%' }"
+            />
+          </div>
+        </template>
+      </div>
     </div>
     <div class="row">
       <div class="col-lg-12">
@@ -243,9 +349,9 @@ onMounted(async () => {
           </div>
           <div class="col-lg-3 col-md-6 col-12">
             <mini-statistics-card
-              title="Estado MLM"
-              :value="kpis.activityStatus"
-              description="<span class='text-sm font-weight-bolder'>PV mensual</span>"
+              title="PV mensual (calificación)"
+              :value="kpis.monthlyPvDisplay"
+              :description="'<span class=\'text-sm font-weight-bolder text-secondary\'>Estado:</span> ' + kpis.activityStatus + ' · se actualiza al comprar'"
               :icon="{
                 component: 'ni ni-check-bold',
                 background: 'bg-gradient-danger',

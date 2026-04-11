@@ -33,6 +33,36 @@ class MlmBootstrapSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'slug' => 'plata',
+                'name' => 'Plata',
+                'sort_order' => 20,
+                'max_residual_generations' => 3,
+                'residual_rate_override' => null,
+                'leadership_rate' => 0.10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'slug' => 'oro',
+                'name' => 'Oro',
+                'sort_order' => 30,
+                'max_residual_generations' => 3,
+                'residual_rate_override' => null,
+                'leadership_rate' => 0.10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'slug' => 'zafiro',
+                'name' => 'Zafiro',
+                'sort_order' => 40,
+                'max_residual_generations' => 3,
+                'residual_rate_override' => null,
+                'leadership_rate' => 0.10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ], ['slug'], ['name', 'sort_order', 'max_residual_generations', 'residual_rate_override', 'leadership_rate', 'updated_at']);
 
         Category::query()->firstOrCreate(

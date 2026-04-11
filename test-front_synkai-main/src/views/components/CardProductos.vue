@@ -4,6 +4,7 @@ import { useStore } from "vuex";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 import ArgonButton from "@/components/ArgonButton.vue";
 import { fetchProductsCatalog, createOrder, fetchProfile } from "@/services/me";
+import { useMlmLiveRefresh } from "@/composables/useMlmLiveRefresh";
 
 import producto1 from "@/assets/img/productos/1.png";
 import producto2 from "@/assets/img/productos/2.png";
@@ -90,6 +91,22 @@ function mapEstatico(p) {
 const productosEstaticosVista = PRODUCTOS_ESTATICOS.map(mapEstatico);
 
 const store = useStore();
+
+async function syncProfilePv() {
+  if (!localStorage.getItem("token")) return;
+  try {
+    const profile = await fetchProfile();
+    await store.dispatch("auth/setAuth", {
+      user: profile,
+      token: localStorage.getItem("token"),
+    });
+  } catch {
+    /* mantiene último PV en store */
+  }
+}
+
+useMlmLiveRefresh(syncProfilePv, 12000);
+
 const loading = ref(true);
 const loadError = ref("");
 const productos = ref([]);
@@ -97,6 +114,9 @@ const carrito = ref([]);
 const checkoutLoading = ref(false);
 const checkoutMsg = ref("");
 const checkoutErr = ref("");
+/** immediate = comisión/PV al instante (simulado); manual = empresa confirma en panel admin */
+const paymentSettlement = ref("immediate");
+const paymentMethodOffline = ref("efectivo");
 
 const cartStorageKey = computed(() => {
   const id = store.state.auth.user?.id;
@@ -286,9 +306,12 @@ async function finalizarCompra() {
       product_id: c.product_id,
       cantidad: c.cantidad,
     }));
-    await createOrder({
+    const immediate = paymentSettlement.value === "immediate";
+    const order = await createOrder({
       tipo: "producto",
       items,
+      payment_settlement: immediate ? "immediate" : "manual",
+      payment_method: immediate ? "tarjeta" : paymentMethodOffline.value,
     });
     carrito.value = [];
     persistCart();
@@ -297,8 +320,13 @@ async function finalizarCompra() {
       user: profile,
       token: localStorage.getItem("token"),
     });
-    checkoutMsg.value =
-      "Pedido registrado. Los PV se acreditan según el procesamiento MLM (revisa tu PV mensual en el perfil).";
+    if (immediate && order?.estado === "completado") {
+      checkoutMsg.value =
+        "Pedido registrado. Los PV se acreditan según el procesamiento MLM (revisa tu PV mensual en el perfil).";
+    } else {
+      checkoutMsg.value =
+        "Pedido registrado como pendiente de pago. La empresa lo confirmará (efectivo/QR/transferencia) y entonces se aplicarán PV y comisiones.";
+    }
   } catch (e) {
     checkoutErr.value =
       e.response?.data?.message || "No se pudo completar el pedido. Inténtalo de nuevo.";
@@ -316,7 +344,8 @@ async function finalizarCompra() {
           <div class="p-4 card-body">
             <h4 class="mb-2 text-dark font-weight-bolder">Catálogo de productos</h4>
             <p class="mb-1 text-sm text-secondary">
-              Precios desde la base de datos. El checkout crea un pedido completado y suma PV según reglas MLM.
+              Precios desde la base de datos. Puedes registrar pago inmediato (simulado) o pendiente (efectivo/QR) para
+              que empresa confirme en administración.
             </p>
             <p v-if="userPv != null" class="mb-0 text-sm">
               <strong>Tu PV mensual (calificación):</strong>
@@ -586,6 +615,24 @@ async function finalizarCompra() {
             </table>
           </div>
           <div class="card-footer bg-transparent border-0 pt-0 pb-3">
+            <div class="row g-2 mb-3">
+              <div class="col-md-6">
+                <label class="form-label text-xs text-muted mb-1">Forma de pago</label>
+                <select v-model="paymentSettlement" class="form-control form-control-sm">
+                  <option value="immediate">Inmediato (simulado en sistema)</option>
+                  <option value="manual">Efectivo / QR / transferencia (pendiente en empresa)</option>
+                </select>
+              </div>
+              <div v-if="paymentSettlement === 'manual'" class="col-md-6">
+                <label class="form-label text-xs text-muted mb-1">Detalle</label>
+                <select v-model="paymentMethodOffline" class="form-control form-control-sm">
+                  <option value="efectivo">Efectivo</option>
+                  <option value="qr">QR</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+            </div>
             <p v-if="checkoutMsg" class="text-success text-sm">{{ checkoutMsg }}</p>
             <p v-if="checkoutErr" class="text-danger text-sm">{{ checkoutErr }}</p>
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">

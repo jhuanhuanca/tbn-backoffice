@@ -26,6 +26,7 @@ import AdminRetiros from "../views/admin/AdminRetiros.vue";
 import AdminReconciliacion from "../views/admin/AdminReconciliacion.vue";
 import AdminProductos from "../views/admin/AdminProductos.vue";
 import AdminPaquetes from "../views/admin/AdminPaquetes.vue";
+import AdminPedidos from "../views/admin/AdminPedidos.vue";
 
 const requiresAuth = { requiresAuth: true };
 const requiresAdmin = { requiresAuth: true, requiresAdmin: true };
@@ -81,6 +82,7 @@ const routes = [
   { path: "/admin/reconciliacion", name: "AdminReconciliacion", component: AdminReconciliacion, meta: requiresAdmin },
   { path: "/admin/productos", name: "AdminProductos", component: AdminProductos, meta: requiresAdmin },
   { path: "/admin/paquetes", name: "AdminPaquetes", component: AdminPaquetes, meta: requiresAdmin },
+  { path: "/admin/pedidos", name: "AdminPedidos", component: AdminPedidos, meta: requiresAdmin },
 ];
 
 const router = createRouter({
@@ -131,6 +133,14 @@ router.beforeEach((to, from, next) => {
   }
 
   if (to.meta.guest && token) {
+    const sponsorQuery =
+      to.query?.sponsor ||
+      to.query?.ref ||
+      to.query?.codigo;
+    if (to.name === "Signup" && sponsorQuery) {
+      next();
+      return;
+    }
     let user = null;
     try {
       user = JSON.parse(localStorage.getItem("user") || "null");

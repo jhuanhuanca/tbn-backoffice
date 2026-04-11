@@ -9,6 +9,7 @@ use App\Models\BinaryWeeklyCarry;
 use App\Models\CommissionEvent;
 use App\Models\User;
 use App\Services\BinaryService;
+use App\Services\MlmBonusProgressService;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 
@@ -21,7 +22,7 @@ class MeController extends Controller
         );
     }
 
-    public function dashboard(Request $request, WalletService $walletService, BinaryService $binaryService)
+    public function dashboard(Request $request, WalletService $walletService, BinaryService $binaryService, MlmBonusProgressService $bonusProgress)
     {
         /** @var User $user */
         $user = $request->user()->loadMissing('rank', 'sponsor');
@@ -54,6 +55,7 @@ class MeController extends Controller
 
         return response()->json([
             'commissions_total' => $commissionsTotal,
+            'bonus_progress' => $bonusProgress->resumen($user),
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,

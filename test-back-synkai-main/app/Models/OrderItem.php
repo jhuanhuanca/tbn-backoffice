@@ -15,6 +15,10 @@ class OrderItem extends Model
         'precio_unitario',
         'precio_total',
         'pv_points',
+        'commissionable_pv',
+        'commissionable_amount',
+        'line_currency',
+        'fx_rate_to_wallet',
     ];
 
     protected function casts(): array
@@ -23,6 +27,9 @@ class OrderItem extends Model
             'precio_unitario' => 'decimal:2',
             'precio_total' => 'decimal:2',
             'pv_points' => 'decimal:2',
+            'commissionable_pv' => 'decimal:4',
+            'commissionable_amount' => 'decimal:4',
+            'fx_rate_to_wallet' => 'decimal:8',
         ];
     }
 

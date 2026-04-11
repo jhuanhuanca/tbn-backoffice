@@ -36,6 +36,13 @@ const modulos = [
     color: "success",
   },
   {
+    to: "/admin/pedidos",
+    title: "Pedidos (pagos)",
+    text: "Confirmar pagos en efectivo, QR o transferencia pendientes.",
+    icon: "ni ni-cart",
+    color: "secondary",
+  },
+  {
     to: "/admin/retiros",
     title: "Retiros",
     text: "Aprobar o rechazar solicitudes de retiro.",

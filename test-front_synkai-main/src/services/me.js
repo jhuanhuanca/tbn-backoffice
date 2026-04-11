@@ -40,6 +40,6 @@ export function createOrder(payload) {
   return api.post("/orders", payload).then((r) => r.data);
 }
 
-export function postBinaryPlacement(leg) {
-  return api.post("/me/binary-placement", { leg }).then((r) => r.data);
+export function postBinaryPlacement() {
+  return api.post("/me/binary-placement", {}).then((r) => r.data);
 }

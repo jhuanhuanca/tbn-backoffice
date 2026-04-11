@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Services\BinaryService;
-use App\Services\CommissionService;
+use App\Services\CommissionEngine;
 use App\Services\UserQualificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,7 +25,7 @@ class ProcessOrderMlmAccrualsJob implements ShouldQueue
     }
 
     public function handle(
-        CommissionService $commissionService,
+        CommissionEngine $commissionEngine,
         BinaryService $binaryService,
         UserQualificationService $qualificationService
     ): void {
@@ -46,9 +46,12 @@ class ProcessOrderMlmAccrualsJob implements ShouldQueue
         }
 
         $buyer = $buyer->fresh();
+        if (! $buyer->canAccessAdminPanel()) {
+            $binaryService->placeUserInFirstFreeSlot($buyer);
+            $buyer = $buyer->fresh();
+        }
 
-        $commissionService->calcularBonoInicioRapido($order);
-        $commissionService->calcularResidualPorPedido($order);
+        $commissionEngine->process($order);
         if ($buyer->binaryPlacement()->exists()) {
             $binaryService->acumularVolumenBinarioPorPedido($order);
         }

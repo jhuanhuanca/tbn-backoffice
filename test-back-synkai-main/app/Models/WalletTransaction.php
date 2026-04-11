@@ -22,6 +22,8 @@ class WalletTransaction extends Model
         'idempotency_key',
         'type',
         'amount',
+        'balance_before',
+        'balance_after',
         'reference',
         'description',
         'commission_event_id',
@@ -33,6 +35,8 @@ class WalletTransaction extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'balance_before' => 'decimal:2',
+            'balance_after' => 'decimal:2',
             'meta' => 'array',
             'created_at' => 'datetime',
         ];

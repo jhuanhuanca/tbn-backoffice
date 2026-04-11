@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\AdminCategoryController;
 use App\Http\Controllers\Api\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\Admin\AdminLeadershipController;
+use App\Http\Controllers\Api\Admin\AdminOrderController;
 use App\Http\Controllers\Api\Admin\AdminPackageController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
 use App\Http\Controllers\Api\Admin\AdminReconciliationController;
@@ -63,6 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('mlm.admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index']);
+        Route::get('/orders', [AdminOrderController::class, 'index']);
+        Route::post('/orders/{order}/confirm-payment', [AdminOrderController::class, 'confirmPayment']);
         Route::get('/withdrawals', [AdminWithdrawalController::class, 'index']);
         Route::post('/withdrawals/{withdrawal}/approve', [AdminWithdrawalController::class, 'approve']);
         Route::post('/withdrawals/{withdrawal}/reject', [AdminWithdrawalController::class, 'reject']);

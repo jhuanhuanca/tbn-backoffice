@@ -12,7 +12,6 @@ import { useRouter } from "vue-router";
 import ArgonButton from "@/components/ArgonButton.vue";
 import logo from "@/assets/img/synkailogo2.png";
 import { fetchPackages } from "@/services/me";
-import { STATIC_PACKAGES_CARDS } from "@/constants/landingStaticPackages";
 import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
 
 const store = useStore();
@@ -24,7 +23,6 @@ const currentSection = ref("inicio");
 const sectionIds = ["inicio", "como-funciona", "plan-compensacion", "productos", "faq"];
 
 const packages = ref([]);
-const staticPackages = STATIC_PACKAGES_CARDS;
 const paymentMethods = REGISTRATION_PAYMENT_METHODS;
 
 async function loadPackages() {
@@ -546,49 +544,8 @@ onUnmounted(() => {
         </div>
 
         <h5 class="text-center text-dark font-weight-bolder mb-4">Paquetes destacados</h5>
-        <div class="row">
-          <div
-            v-for="card in staticPackages"
-            :key="card.slug"
-            class="col-lg-4 col-md-6 mb-4"
-          >
-            <div class="card h-100 border-0 shadow-sm" :class="{ 'position-relative': card.recommended }">
-              <span
-                v-if="card.recommended"
-                class="badge bg-gradient-success position-absolute top-0 end-0 m-3"
-              >
-                Recomendado
-              </span>
-              <div class="card-body p-4">
-                <h6 class="font-weight-bolder mb-1">{{ card.name }}</h6>
-                <p class="text-xs text-secondary mb-3">{{ card.description }}</p>
-                <h5 class="mb-1 text-primary font-weight-bolder">{{ card.priceDisplay }}</h5>
-                <p class="text-xs text-secondary mb-3">{{ card.pvDisplay }}</p>
-                <ul class="list-unstyled mb-4 text-xs text-secondary">
-                  <li v-for="(f, fi) in card.features" :key="fi">
-                    <i class="ni ni-check-bold text-success me-1"></i>{{ f }}
-                  </li>
-                </ul>
-                <argon-button
-                  :color="card.recommended ? 'success' : 'primary'"
-                  :variant="card.btnVariant"
-                  full-width
-                  size="sm"
-                >
-                  <router-link
-                    :to="{ path: '/signup', query: { slug: card.slug } }"
-                    class="nav-link"
-                    :class="card.recommended ? 'text-white' : ''"
-                  >
-                    Elegir paquete
-                  </router-link>
-                </argon-button>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <h5 class="text-center text-dark font-weight-bolder mb-4 mt-4">Catálogo en línea (base de datos)</h5>
+        <h5 class="text-center text-dark font-weight-bolder mb-4 mt-4">Catálogo en línea </h5>
         <div class="row">
           <div v-if="packages.length === 0" class="col-12 text-center text-secondary text-sm py-4">
             Cargando paquetes desde el servidor…
@@ -674,7 +631,7 @@ onUnmounted(() => {
                 <p class="text-xs text-white opacity-8 mb-0">Afiliados activos</p>
               </div>
               <div class="col-6 mb-3">
-                <h4 class="text-white mb-0 font-weight-bolder">+32</h4>
+                <h4 class="text-white mb-0 font-weight-bolder">+10</h4>
                 <p class="text-xs text-white opacity-8 mb-0">Países</p>
               </div>
               <div class="col-6 mb-3">

@@ -105,7 +105,7 @@ onMounted(async () => {
 });
 
 watch(
-  () => route.query.sponsor,
+  () => [route.query.sponsor, route.query.ref, route.query.codigo],
   () => {
     applySponsorFromRoute();
     if (sponsorReferralCode.value) {

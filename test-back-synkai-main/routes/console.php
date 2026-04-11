@@ -2,6 +2,8 @@
 
 use App\Jobs\CalculateBinaryCommissionsJob;
 use App\Jobs\ProcessResidualCommissionsJob;
+use App\Services\PeriodService;
+use App\Services\RankService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 
@@ -20,3 +22,25 @@ Artisan::command('mlm:close-monthly-residual {monthKey?}', function (?string $mo
     ProcessResidualCommissionsJob::dispatchSync($key);
     $this->info("Cierre mensual (auditoría residual) {$key}");
 })->purpose('Cierre mensual / auditoría residual');
+
+Artisan::command('mlm:accounting-period {action} {type} {periodKey}', function (string $action, string $type, string $periodKey) {
+    $period = app(PeriodService::class);
+    if ($action === 'close') {
+        $period->cerrar($type, $periodKey, ['by' => 'cli']);
+        $this->info("Periodo {$type} {$periodKey} cerrado.");
+    } elseif ($action === 'open') {
+        $period->abrir($type, $periodKey);
+        $this->info("Periodo {$type} {$periodKey} abierto.");
+    } else {
+        $this->error('Acción: close | open');
+
+        return 1;
+    }
+
+    return 0;
+})->purpose('Cierra/abre periodos contables MLM (bloquea reproceso de comisiones)');
+
+Artisan::command('mlm:reevaluate-ranks', function () {
+    $n = app(RankService::class)->reevaluarTodosLosRangos();
+    $this->info("Usuarios con cambio de rango: {$n}");
+})->purpose('Re-evalúa rangos por PV mensual (batch)');

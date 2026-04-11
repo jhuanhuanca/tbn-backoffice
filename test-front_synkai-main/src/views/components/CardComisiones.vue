@@ -142,6 +142,27 @@ export default {
   },
   mounted() {
     this.cargar();
+    this._refreshTimer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      this.cargar(true);
+    }, 15000);
+    this._onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        this.cargar(true);
+      }
+    };
+    document.addEventListener("visibilitychange", this._onVisibility);
+  },
+  beforeUnmount() {
+    if (this._onVisibility) {
+      document.removeEventListener("visibilitychange", this._onVisibility);
+    }
+    if (this._refreshTimer) {
+      clearInterval(this._refreshTimer);
+      this._refreshTimer = null;
+    }
   },
   methods: {
     formatBs(v) {
@@ -155,12 +176,14 @@ export default {
         minimumFractionDigits: 2,
       }).format(n);
     },
-    async cargar() {
+    async cargar(silent = false) {
       if (!localStorage.getItem("token")) {
         this.error = "Inicia sesión.";
         return;
       }
-      this.loading = true;
+      if (!silent) {
+        this.loading = true;
+      }
       this.error = null;
       try {
         const [c, w] = await Promise.all([fetchCommissions(), fetchWalletBalance()]);
@@ -174,9 +197,13 @@ export default {
         this.items = c.items || [];
         this.disponible = w.available || "0";
       } catch {
-        this.error = "No se pudieron cargar las comisiones.";
+        if (!silent) {
+          this.error = "No se pudieron cargar las comisiones.";
+        }
       } finally {
-        this.loading = false;
+        if (!silent) {
+          this.loading = false;
+        }
       }
     },
   },

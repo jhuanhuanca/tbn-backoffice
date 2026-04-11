@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\BinaryPlacement;
 use App\Models\Order;
 use App\Services\BinaryService;
 use Illuminate\Http\Request;
@@ -11,7 +10,7 @@ use Illuminate\Http\Request;
 class BinaryPlacementSelfController extends Controller
 {
     /**
-     * El socio elige pierna izquierda o derecha bajo su patrocinador (tras activación pagada).
+     * Colocación automática en el primer hueco libre bajo el patrocinador (tras activación pagada).
      */
     public function store(Request $request, BinaryService $binaryService)
     {
@@ -31,29 +30,12 @@ class BinaryPlacementSelfController extends Controller
             return response()->json(['message' => 'Ya tienes colocación binaria.'], 422);
         }
 
-        $data = $request->validate([
-            'leg' => 'required|in:left,right',
-        ]);
-
-        $sponsorId = (int) $user->sponsor_id;
-        $occupied = BinaryPlacement::query()
-            ->where('parent_user_id', $sponsorId)
-            ->where('leg_position', $data['leg'])
-            ->where('user_id', '!=', $user->id)
-            ->exists();
-
-        if ($occupied) {
-            return response()->json(['message' => 'Esa pierna ya está ocupada. Elige la otra.'], 422);
+        $placement = $binaryService->placeUserInFirstFreeSlot($user);
+        if (! $placement) {
+            return response()->json([
+                'message' => 'No hay posición libre bajo tu patrocinador. Contacta a soporte.',
+            ], 422);
         }
-
-        $placement = BinaryPlacement::query()->create([
-            'user_id' => $user->id,
-            'parent_user_id' => $sponsorId,
-            'leg_position' => $data['leg'],
-        ]);
-
-        $binaryService->olvidarCacheArbol($user->id);
-        $binaryService->olvidarCacheArbol($sponsorId);
 
         $orders = Order::query()
             ->where('user_id', $user->id)

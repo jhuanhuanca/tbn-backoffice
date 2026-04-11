@@ -63,3 +63,11 @@ export function updateAdminPackage(id, body) {
 export function deleteAdminPackage(id) {
   return api.delete(`/admin/packages/${id}`);
 }
+
+export function fetchAdminOrders(params) {
+  return api.get("/admin/orders", { params });
+}
+
+export function confirmOrderPayment(orderId, payload) {
+  return api.post(`/admin/orders/${orderId}/confirm-payment`, payload);
+}

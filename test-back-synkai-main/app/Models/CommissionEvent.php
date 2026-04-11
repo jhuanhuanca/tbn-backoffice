@@ -12,6 +12,7 @@ class CommissionEvent extends Model
 
     protected $fillable = [
         'idempotency_key',
+        'unique_hash',
         'beneficiary_user_id',
         'origin_user_id',
         'type',

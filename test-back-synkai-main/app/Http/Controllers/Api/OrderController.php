@@ -35,7 +35,11 @@ class OrderController extends Controller
             'items.*.product_id' => 'nullable|exists:products,id',
             'items.*.package_id' => 'nullable|exists:packages,id',
             'items.*.cantidad' => 'required|integer|min:1',
+            'payment_settlement' => 'nullable|string|in:immediate,manual',
+            'payment_method' => 'nullable|string|max:32',
         ]);
+
+        $immediate = ($data['payment_settlement'] ?? 'immediate') === 'immediate';
 
         $buyer = $request->user();
         if (! $buyer->canAccessAdminPanel() && $buyer->activation_paid_at === null) {
@@ -55,7 +59,7 @@ class OrderController extends Controller
 
         $buyerId = $request->user()->id;
 
-        $order = DB::transaction(function () use ($data, $buyerId) {
+        $order = DB::transaction(function () use ($data, $buyerId, $immediate) {
             $total = '0';
             $totalPv = '0';
 
@@ -65,7 +69,8 @@ class OrderController extends Controller
                 'cantidad' => 0,
                 'total' => 0,
                 'total_pv' => 0,
-                'estado' => 'pendiente',
+                'estado' => $immediate ? 'pendiente' : 'pendiente_pago',
+                'payment_method' => $data['payment_method'] ?? ($immediate ? 'online' : 'pendiente'),
             ]);
 
             $qtySum = 0;
@@ -126,18 +131,22 @@ class OrderController extends Controller
             return $order->fresh(['items']);
         });
 
-        $order->markCompleted();
+        if ($immediate) {
+            $order->markCompleted();
 
-        $order->load(['items.package', 'items.product']);
-        /** @var User $buyer */
-        $buyer = $request->user()->fresh();
-        if (! $buyer->canAccessAdminPanel()) {
-            foreach ($order->items as $item) {
-                if ($item->package_id && $buyer->activation_paid_at === null) {
-                    $buyer->forceFill(['activation_paid_at' => now()])->save();
-                    break;
+            $order->load(['items.package', 'items.product']);
+            /** @var User $buyer */
+            $buyer = $request->user()->fresh();
+            if (! $buyer->canAccessAdminPanel()) {
+                foreach ($order->items as $item) {
+                    if ($item->package_id && $buyer->activation_paid_at === null) {
+                        $buyer->forceFill(['activation_paid_at' => now()])->save();
+                        break;
+                    }
                 }
             }
+        } else {
+            $order->load(['items.package', 'items.product']);
         }
 
         return $order->fresh(['items']);

@@ -61,7 +61,7 @@ class AuthRegisterController extends Controller
             'birth_date' => $validated['birth_date'],
             'sponsor_id' => $sponsorId,
             'rank_id' => Rank::query()->where('slug', 'activo')->value('id'),
-            'account_status' => 'pending',
+            'account_status' => 'active',
             'country_code' => isset($validated['country_code']) ? strtoupper($validated['country_code']) : null,
             'registration_package_id' => $packageId,
             'preferred_payment_method' => $validated['preferred_payment_method'] ?? null,
