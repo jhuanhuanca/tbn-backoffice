@@ -24,6 +24,7 @@ class AdminProductController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
+            'price_cliente_preferente' => ['nullable', 'numeric', 'min:0'],
             'stock' => ['nullable', 'integer', 'min:0'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
@@ -33,6 +34,9 @@ class AdminProductController extends Controller
 
         $data['estado'] = $data['estado'] ?? 'activo';
         $data['stock'] = $data['stock'] ?? 0;
+        if (! isset($data['price_cliente_preferente']) || $data['price_cliente_preferente'] === null || $data['price_cliente_preferente'] === '') {
+            $data['price_cliente_preferente'] = bcadd((string) $data['price'], bcmul((string) $data['price'], '0.12', 4), 2);
+        }
 
         $product = Product::query()->create($data);
 
@@ -45,6 +49,7 @@ class AdminProductController extends Controller
             'name' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'price' => ['sometimes', 'numeric', 'min:0'],
+            'price_cliente_preferente' => ['nullable', 'numeric', 'min:0'],
             'stock' => ['nullable', 'integer', 'min:0'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],

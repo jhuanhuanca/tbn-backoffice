@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Admin\AdminReconciliationController;
 use App\Http\Controllers\Api\Admin\AdminWithdrawalController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthRegisterController;
+use App\Http\Controllers\Api\AuthRegisterPreferenteController;
 use App\Http\Controllers\Api\BinaryPlacementController;
 use App\Http\Controllers\Api\BinaryPlacementSelfController;
 use App\Http\Controllers\Api\MeController;
@@ -25,6 +26,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthRegisterController::class, 'register']);
+Route::post('/register/preferred-customer', [AuthRegisterPreferenteController::class, 'register']);
 
 Route::post('/email/resend-verification', function (Request $request) {
     $request->validate(['email' => ['required', 'email']]);

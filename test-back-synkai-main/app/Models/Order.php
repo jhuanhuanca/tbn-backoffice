@@ -73,7 +73,8 @@ class Order extends Model
     }
 
     /**
-     * PV comisionable del pedido: líneas con snapshot (paquete) o pv_points × cantidad.
+     * PV comisionable del pedido.
+     * Nota: en `order_items`, `pv_points` ya es el PV total de la línea (unitario × cantidad), igual que al crear el pedido.
      */
     public function commissionablePvTotal(): string
     {
@@ -83,7 +84,7 @@ class Order extends Model
             if ($item->commissionable_pv !== null && $item->commissionable_pv !== '') {
                 $sum = bcadd($sum, (string) $item->commissionable_pv, 4);
             } else {
-                $sum = bcadd($sum, bcmul((string) $item->pv_points, (string) $item->cantidad, 4), 4);
+                $sum = bcadd($sum, (string) $item->pv_points, 4);
             }
         }
 

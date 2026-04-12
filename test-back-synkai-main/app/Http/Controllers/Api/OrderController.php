@@ -42,7 +42,23 @@ class OrderController extends Controller
         $immediate = ($data['payment_settlement'] ?? 'immediate') === 'immediate';
 
         $buyer = $request->user();
-        if (! $buyer->canAccessAdminPanel() && $buyer->activation_paid_at === null) {
+
+        if ($buyer->isPreferredCustomer()) {
+            foreach ($data['items'] as $row) {
+                if (! empty($row['package_id'])) {
+                    return response()->json([
+                        'message' => 'Los clientes preferentes solo pueden comprar productos (no paquetes de socio).',
+                    ], 422);
+                }
+            }
+            if (($data['tipo'] ?? '') !== 'producto') {
+                return response()->json([
+                    'message' => 'Los clientes preferentes solo realizan pedidos de tipo producto.',
+                ], 422);
+            }
+        }
+
+        if (! $buyer->canAccessAdminPanel() && ! $buyer->isPreferredCustomer() && $buyer->activation_paid_at === null) {
             $hasPackage = false;
             foreach ($data['items'] as $row) {
                 if (! empty($row['package_id'])) {
@@ -59,7 +75,7 @@ class OrderController extends Controller
 
         $buyerId = $request->user()->id;
 
-        $order = DB::transaction(function () use ($data, $buyerId, $immediate) {
+        $order = DB::transaction(function () use ($data, $buyerId, $immediate, $buyer) {
             $total = '0';
             $totalPv = '0';
 
@@ -97,13 +113,28 @@ class OrderController extends Controller
                         'precio_unitario' => $unit,
                         'precio_total' => $line,
                         'pv_points' => $pvLine,
+                        'meta' => null,
                     ]);
 
                     $total = bcadd($total, $line, 2);
                     $totalPv = bcadd($totalPv, $pvLine, 2);
                 } else {
                     $prod = Product::query()->findOrFail($row['product_id']);
-                    $unit = (string) $prod->price;
+                    if ($buyer->isPreferredCustomer()) {
+                        $clienteUnit = $prod->price_cliente_preferente !== null
+                            ? (string) $prod->price_cliente_preferente
+                            : (string) $prod->price;
+                        $socioUnit = bcadd((string) $prod->price, '0', 2);
+                        $unit = bcadd($clienteUnit, '0', 2);
+                        $meta = [
+                            'preferred_customer_line' => true,
+                            'precio_socio_unit' => $socioUnit,
+                            'precio_cliente_unit' => $unit,
+                        ];
+                    } else {
+                        $unit = (string) $prod->price;
+                        $meta = null;
+                    }
                     $line = bcmul($unit, (string) $qty, 2);
                     $pvLine = bcmul((string) $prod->pv_points, (string) $qty, 2);
 
@@ -115,6 +146,7 @@ class OrderController extends Controller
                         'precio_unitario' => $unit,
                         'precio_total' => $line,
                         'pv_points' => $pvLine,
+                        'meta' => $meta,
                     ]);
 
                     $total = bcadd($total, $line, 2);
@@ -137,7 +169,7 @@ class OrderController extends Controller
             $order->load(['items.package', 'items.product']);
             /** @var User $buyer */
             $buyer = $request->user()->fresh();
-            if (! $buyer->canAccessAdminPanel()) {
+            if (! $buyer->canAccessAdminPanel() && ! $buyer->isPreferredCustomer()) {
                 foreach ($order->items as $item) {
                     if ($item->package_id && $buyer->activation_paid_at === null) {
                         $buyer->forceFill(['activation_paid_at' => now()])->save();

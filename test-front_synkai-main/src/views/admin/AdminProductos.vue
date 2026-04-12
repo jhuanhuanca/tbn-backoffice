@@ -21,6 +21,7 @@ const form = ref({
   name: "",
   description: "",
   price: "",
+  price_cliente_preferente: "",
   stock: 0,
   image_url: "",
   category_id: "",
@@ -36,6 +37,7 @@ function resetForm() {
     name: "",
     description: "",
     price: "",
+    price_cliente_preferente: "",
     stock: 0,
     image_url: "",
     category_id: "",
@@ -64,6 +66,10 @@ function editar(p) {
     name: p.name ?? "",
     description: p.description ?? "",
     price: String(p.price ?? ""),
+    price_cliente_preferente:
+      p.price_cliente_preferente != null && p.price_cliente_preferente !== ""
+        ? String(p.price_cliente_preferente)
+        : "",
     stock: p.stock ?? 0,
     image_url: p.image_url ?? "",
     category_id: p.category_id ? String(p.category_id) : "",
@@ -86,6 +92,10 @@ async function guardar() {
       pv_points: parseFloat(form.value.pv_points),
       estado: form.value.estado,
     };
+    const pcp = form.value.price_cliente_preferente;
+    if (pcp !== "" && pcp != null && !Number.isNaN(parseFloat(String(pcp)))) {
+      payload.price_cliente_preferente = parseFloat(String(pcp));
+    }
     if (isEditing.value) {
       await updateAdminProduct(form.value.id, payload);
     } else {
@@ -122,7 +132,8 @@ onMounted(load);
     <h4 class="mb-3">Productos del catálogo</h4>
     <p class="text-sm text-muted">
       Los socios ven solo productos con estado <strong>activo</strong> en la tienda. El PV del ítem alimenta
-      pedidos y calificación mensual.
+      pedidos y calificación mensual. El <strong>precio cliente preferente</strong> es el que pagan los clientes
+      preferentes; si lo dejas vacío al crear, el backend calcula uno por defecto (socio + 12&nbsp;%).
     </p>
     <p v-if="error" class="text-danger text-sm">{{ error }}</p>
 
@@ -136,11 +147,21 @@ onMounted(load);
             <label class="form-label text-sm">Nombre</label>
             <argon-input v-model="form.name" type="text" placeholder="Nombre" />
           </div>
-          <div class="col-md-3">
-            <label class="form-label text-sm">Precio (BOB)</label>
+          <div class="col-md-2">
+            <label class="form-label text-sm">Precio socio (BOB)</label>
             <argon-input v-model="form.price" type="number" step="0.01" min="0" />
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
+            <label class="form-label text-sm">Cliente pref. (opc.)</label>
+            <argon-input
+              v-model="form.price_cliente_preferente"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Auto"
+            />
+          </div>
+          <div class="col-md-2">
             <label class="form-label text-sm">PV</label>
             <argon-input v-model="form.pv_points" type="number" step="0.01" min="0" />
           </div>
@@ -189,7 +210,8 @@ onMounted(load);
           <tr>
             <th class="text-uppercase text-xxs">ID</th>
             <th class="text-uppercase text-xxs">Nombre</th>
-            <th class="text-uppercase text-xxs">Precio</th>
+            <th class="text-uppercase text-xxs">Precio socio</th>
+            <th class="text-uppercase text-xxs">Cliente pref.</th>
             <th class="text-uppercase text-xxs">PV</th>
             <th class="text-uppercase text-xxs">Estado</th>
             <th class="text-uppercase text-xxs"></th>
@@ -200,6 +222,7 @@ onMounted(load);
             <td class="text-sm">{{ p.id }}</td>
             <td class="text-sm">{{ p.name }}</td>
             <td class="text-sm">{{ p.price }}</td>
+            <td class="text-sm">{{ p.price_cliente_preferente ?? "—" }}</td>
             <td class="text-sm">{{ p.pv_points }}</td>
             <td class="text-sm">
               <span class="badge" :class="p.estado === 'activo' ? 'bg-success' : 'bg-secondary'">{{

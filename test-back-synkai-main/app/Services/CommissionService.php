@@ -45,9 +45,10 @@ class CommissionService
                     ? (string) $item->commissionable_amount
                     : bcmul($item->package->commissionableValue(), (string) $item->cantidad, 4);
             } else {
+                // PV base = línea completa (commissionable_pv o pv_points del ítem; ya incluye cantidad al crear el pedido).
                 $baseUnits = $item->commissionable_pv !== null && $item->commissionable_pv !== ''
                     ? (string) $item->commissionable_pv
-                    : bcmul((string) $item->pv_points, (string) $item->cantidad, 4);
+                    : (string) $item->pv_points;
             }
 
             $sponsor = $buyer->sponsor;
@@ -298,6 +299,67 @@ class CommissionService
         );
     }
 
+    /**
+     * Bono venta directa: diferencia (precio cliente preferente − precio socio) × cantidad → wallet del patrocinador.
+     * Solo pedidos de compradores con account_type = preferred_customer e ítems de producto.
+     */
+    public function acreditarBonosVentaDirectaPreferente(Order $order): void
+    {
+        $buyer = $order->user;
+        if (! $buyer || ! $buyer->isPreferredCustomer() || ! $buyer->sponsor_id) {
+            return;
+        }
+
+        $sponsor = User::query()->find($buyer->sponsor_id);
+        if (! $sponsor) {
+            return;
+        }
+
+        $order->loadMissing(['items.product']);
+
+        foreach ($order->items as $item) {
+            if (! $item->product_id || ! $item->product) {
+                continue;
+            }
+
+            $prod = $item->product;
+            $socioUnit = bcadd((string) $prod->price, '0', 2);
+            $paidUnit = bcadd((string) $item->precio_unitario, '0', 2);
+            $qty = (string) $item->cantidad;
+            $deltaUnit = bcsub($paidUnit, $socioUnit, 2);
+            if (bccomp($deltaUnit, '0', 2) !== 1) {
+                continue;
+            }
+
+            $amount = $this->roundMoney(bcmul($deltaUnit, $qty, 4));
+            if (bccomp($amount, '0', 2) !== 1) {
+                continue;
+            }
+
+            $key = "venta_directa:order:{$order->id}:item:{$item->id}";
+            $this->registrarYAcreditar(
+                idempotencyKey: $key,
+                beneficiary: $sponsor,
+                origin: $buyer,
+                type: 'venta_directa',
+                level: null,
+                amount: $amount,
+                order: $order,
+                periodKey: now()->format('Y-m'),
+                periodType: 'monthly',
+                meta: [
+                    'order_item_id' => $item->id,
+                    'product_id' => $item->product_id,
+                    'precio_socio_unit' => $socioUnit,
+                    'precio_cliente_unit' => $paidUnit,
+                    'cantidad' => $qty,
+                    'delta_unit' => $deltaUnit,
+                    'label' => 'Bono venta directa',
+                ]
+            );
+        }
+    }
+
     public function procesarCierreMensual(string $monthKey): void
     {
         $closure = PeriodClosure::query()->firstOrCreate(
@@ -363,13 +425,18 @@ class CommissionService
             }
 
             $walletKey = 'wallet:credit:'.$idempotencyKey;
+            $walletDescription = match ($type) {
+                'venta_directa' => 'Bono venta directa (cliente preferente)',
+                default => "Comisión {$type}",
+            };
+
             $tx = $this->walletService->acreditar(
                 $beneficiary,
                 $amount,
                 $walletKey,
                 $event,
                 reference: $type,
-                description: "Comisión {$type}",
+                description: $walletDescription,
                 meta: array_merge($meta, ['commission_event_id' => $event->id])
             );
 

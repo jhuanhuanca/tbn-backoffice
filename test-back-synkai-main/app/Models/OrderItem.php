@@ -19,6 +19,7 @@ class OrderItem extends Model
         'commissionable_amount',
         'line_currency',
         'fx_rate_to_wallet',
+        'meta',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class OrderItem extends Model
             'commissionable_pv' => 'decimal:4',
             'commissionable_amount' => 'decimal:4',
             'fx_rate_to_wallet' => 'decimal:8',
+            'meta' => 'array',
         ];
     }
 

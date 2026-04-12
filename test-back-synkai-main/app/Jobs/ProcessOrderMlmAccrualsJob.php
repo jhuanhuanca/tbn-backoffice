@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Order;
 use App\Services\BinaryService;
 use App\Services\CommissionEngine;
+use App\Services\CommissionService;
 use App\Services\UserQualificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,6 +27,7 @@ class ProcessOrderMlmAccrualsJob implements ShouldQueue
 
     public function handle(
         CommissionEngine $commissionEngine,
+        CommissionService $commissionService,
         BinaryService $binaryService,
         UserQualificationService $qualificationService
     ): void {
@@ -38,6 +40,12 @@ class ProcessOrderMlmAccrualsJob implements ShouldQueue
         }
 
         $buyer = $order->user;
+        if ($buyer && $buyer->isPreferredCustomer()) {
+            $order->loadMissing(['items.product', 'user']);
+            $commissionService->acreditarBonosVentaDirectaPreferente($order->fresh(['items.product', 'user']));
+
+            return;
+        }
         foreach ($order->items as $item) {
             if ($item->package_id && $buyer->activation_paid_at === null && ! $buyer->canAccessAdminPanel()) {
                 $buyer->forceFill(['activation_paid_at' => now()])->save();

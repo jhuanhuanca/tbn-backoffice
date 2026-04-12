@@ -55,6 +55,8 @@ const login = async () => {
         router.push(redir);
       } else if (response.data.user?.can_access_admin_panel) {
         router.push("/admin/dashboard");
+      } else if (response.data.user?.is_preferred_customer) {
+        router.push("/cliente-preferente");
       } else {
         router.push("/dashboard-default");
       }

@@ -60,6 +60,7 @@ class AuthRegisterController extends Controller
             'phone' => $validated['phone'],
             'birth_date' => $validated['birth_date'],
             'sponsor_id' => $sponsorId,
+            'account_type' => 'member',
             'rank_id' => Rank::query()->where('slug', 'activo')->value('id'),
             'account_status' => 'active',
             'country_code' => isset($validated['country_code']) ? strtoupper($validated['country_code']) : null,

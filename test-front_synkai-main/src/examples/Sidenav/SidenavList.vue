@@ -148,6 +148,57 @@ async function cerrarSesion() {
         </li>
       </template>
 
+      <template v-else-if="authUser?.is_preferred_customer">
+        <li v-if="authUser" class="nav-item px-2 text-center border-bottom border-light pb-3 mb-2">
+          <router-link to="/cuenta" class="text-decoration-none d-block">
+            <div
+              class="avatar avatar-lg rounded-circle bg-gradient-success mx-auto text-white d-flex align-items-center justify-content-center shadow-sm"
+              style="width: 56px; height: 56px; min-width: 56px; font-size: 1rem"
+            >
+              {{ userInitials }}
+            </div>
+            <div class="text-sm font-weight-bold text-dark mt-2 text-truncate">{{ authUser.name }}</div>
+            <div class="text-xs text-muted">Cliente preferente</div>
+            <div class="text-xs text-muted text-truncate">{{ countryLabel }}</div>
+          </router-link>
+        </li>
+        <li class="nav-item">
+          <sidenav-item
+            to="/cliente-preferente"
+            :class="getRoute() === 'cliente-preferente' ? 'active' : ''"
+            navText="Inicio"
+          >
+            <template v-slot:icon>
+              <i class="ni ni-shop text-primary text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
+          <sidenav-item to="/compras-realizadas" navText="Mis compras">
+            <template v-slot:icon>
+              <i class="ni ni-cart text-secondary text-sm opacity-10"></i>
+            </template>
+          </sidenav-item>
+        </li>
+        <li class="nav-item">
+          <router-link to="/cuenta" class="nav-link">
+            <i class="ni ni-single-02 text-primary me-2"></i>
+            <span class="nav-link-text ms-1">Mi cuenta</span>
+          </router-link>
+        </li>
+        <li class="nav-item mt-3 pt-3 border-top border-light">
+          <a
+            href="javascript:void(0)"
+            class="nav-link text-sm text-danger"
+            :class="{ 'opacity-50': logoutLoading }"
+            @click="cerrarSesion"
+          >
+            <i class="ni ni-key-25 text-danger me-2"></i>
+            <span class="nav-link-text ms-1">{{ logoutLoading ? "Cerrando…" : "Cerrar sesión" }}</span>
+          </a>
+        </li>
+      </template>
+
       <template v-else>
       <li v-if="authUser" class="nav-item px-2 text-center border-bottom border-light pb-3 mb-2">
         <router-link to="/cuenta" class="text-decoration-none d-block">

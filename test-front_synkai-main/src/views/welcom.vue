@@ -71,6 +71,10 @@ const goSignup = () => {
   router.push("/signup");
 };
 
+const goRegistroPreferente = () => {
+  router.push("/registro-cliente-preferente");
+};
+
 const scrollToHowItWorks = () => {
   const el = document.getElementById("como-funciona");
   if (el) {
@@ -163,9 +167,14 @@ onUnmounted(() => {
                 Iniciar sesión
               </button>
             </li>
+            <li class="nav-item me-2">
+              <button type="button" class="btn btn-sm btn-outline-light mb-0" @click="goRegistroPreferente">
+                Cliente preferente
+              </button>
+            </li>
             <li class="nav-item">
               <argon-button color="primary" variant="gradient" size="sm" @click="goSignup">
-                Registrarse
+                Registrarse socio
               </argon-button>
             </li>
           </ul>

@@ -12,6 +12,7 @@ class Product extends Model
         'name',
         'description',
         'price',
+        'price_cliente_preferente',
         'stock',
         'image_url',
         'category_id',
@@ -23,6 +24,7 @@ class Product extends Model
     {
         return [
             'price' => 'decimal:2',
+            'price_cliente_preferente' => 'decimal:2',
             'pv_points' => 'decimal:2',
         ];
     }

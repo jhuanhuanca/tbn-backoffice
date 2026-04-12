@@ -12,7 +12,24 @@ class MlmBootstrapSeeder extends Seeder
 {
     public function run(): void
     {
-        Rank::query()->upsert([
+        $matrix = config('mlm.residual.matrix_by_rank_slug', []);
+
+        $careerSlugs = [
+            'plata' => 'Plata',
+            'oro' => 'Oro',
+            'zafiro' => 'Zafiro',
+            'rubi' => 'Rubí',
+            'esmeralda' => 'Esmeralda',
+            'diamante' => 'Diamante',
+            'diamante_ejecutivo' => 'Diamante ejecutivo',
+            'doble_diamante' => 'Doble diamante',
+            'triple_diamante' => 'Triple diamante',
+            'diamante_corona' => 'Diamante corona',
+            'doble_diamante_corona' => 'Doble diamante corona',
+            'triple_diamante_corona' => 'Triple diamante corona',
+        ];
+
+        $rankRows = [
             [
                 'slug' => 'sin_rango',
                 'name' => 'Sin rango',
@@ -33,37 +50,30 @@ class MlmBootstrapSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
-            [
-                'slug' => 'plata',
-                'name' => 'Plata',
-                'sort_order' => 20,
-                'max_residual_generations' => 3,
+        ];
+
+        $order = 20;
+        foreach ($careerSlugs as $slug => $label) {
+            $gens = $matrix[$slug] ?? [];
+            $maxGen = $gens === [] ? 0 : max(array_map('intval', array_keys($gens)));
+            $rankRows[] = [
+                'slug' => $slug,
+                'name' => $label,
+                'sort_order' => $order,
+                'max_residual_generations' => $maxGen,
                 'residual_rate_override' => null,
                 'leadership_rate' => 0.10,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ],
-            [
-                'slug' => 'oro',
-                'name' => 'Oro',
-                'sort_order' => 30,
-                'max_residual_generations' => 3,
-                'residual_rate_override' => null,
-                'leadership_rate' => 0.10,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'slug' => 'zafiro',
-                'name' => 'Zafiro',
-                'sort_order' => 40,
-                'max_residual_generations' => 3,
-                'residual_rate_override' => null,
-                'leadership_rate' => 0.10,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ], ['slug'], ['name', 'sort_order', 'max_residual_generations', 'residual_rate_override', 'leadership_rate', 'updated_at']);
+            ];
+            $order += 10;
+        }
+
+        Rank::query()->upsert(
+            $rankRows,
+            ['slug'],
+            ['name', 'sort_order', 'max_residual_generations', 'residual_rate_override', 'leadership_rate', 'updated_at']
+        );
 
         Category::query()->firstOrCreate(
             ['slug' => 'general'],
@@ -71,10 +81,10 @@ class MlmBootstrapSeeder extends Seeder
         );
 
         $packages = [
-            ['slug' => 'basico', 'name' => 'Básico', 'price' => '1050.00', 'pv' => '200'],
-            ['slug' => 'avanzado', 'name' => 'Avanzado', 'price' => '2700.00', 'pv' => '400'],
-            ['slug' => 'profesional', 'name' => 'Profesional', 'price' => '5400.00', 'pv' => '800'],
-            ['slug' => 'fundador', 'name' => 'Fundador', 'price' => '10800.00', 'pv' => '1600'],
+            ['slug' => 'basico', 'name' => 'Paquete básico', 'price' => '1050.00', 'pv' => '100'],
+            ['slug' => 'avanzado', 'name' => 'Paquete avanzado', 'price' => '2700.00', 'pv' => '300'],
+            ['slug' => 'profesional', 'name' => 'Paquete profesional', 'price' => '5400.00', 'pv' => '600'],
+            ['slug' => 'fundador', 'name' => 'Paquete fundador', 'price' => '10800.00', 'pv' => '1200'],
         ];
 
         foreach ($packages as $p) {
@@ -115,4 +125,3 @@ class MlmBootstrapSeeder extends Seeder
         }
     }
 }
-

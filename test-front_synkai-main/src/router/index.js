@@ -27,6 +27,8 @@ import AdminReconciliacion from "../views/admin/AdminReconciliacion.vue";
 import AdminProductos from "../views/admin/AdminProductos.vue";
 import AdminPaquetes from "../views/admin/AdminPaquetes.vue";
 import AdminPedidos from "../views/admin/AdminPedidos.vue";
+import RegistroClientePreferente from "../views/RegistroClientePreferente.vue";
+import ClientePreferenteDashboard from "../views/ClientePreferenteDashboard.vue";
 
 const requiresAuth = { requiresAuth: true };
 const requiresAdmin = { requiresAuth: true, requiresAdmin: true };
@@ -47,6 +49,14 @@ const routes = [
     name: "Referido",
     redirect: (to) => ({
       path: "/signup",
+      query: { sponsor: to.params.sponsorCode },
+    }),
+  },
+  {
+    path: "/ref-pref/:sponsorCode",
+    name: "ReferidoPreferente",
+    redirect: (to) => ({
+      path: "/registro-cliente-preferente",
       query: { sponsor: to.params.sponsorCode },
     }),
   },
@@ -71,6 +81,18 @@ const routes = [
   { path: "/profile", name: "Profile", component: Profile, meta: requiresAuth },
   { path: "/signin", name: "Signin", component: Signin, meta: { guest: true } },
   { path: "/signup", name: "Signup", component: Signup, meta: { guest: true } },
+  {
+    path: "/registro-cliente-preferente",
+    name: "RegistroClientePreferente",
+    component: RegistroClientePreferente,
+    meta: { guest: true },
+  },
+  {
+    path: "/cliente-preferente",
+    name: "ClientePreferente",
+    component: ClientePreferenteDashboard,
+    meta: requiresAuth,
+  },
   { path: "/verificar-correo", name: "VerificarCorreo", component: VerificarCorreo, meta: { guest: true } },
   { path: "/activacion-binaria", name: "ActivacionBinaria", component: ActivacionBinaria, meta: requiresAuth },
   { path: "/cuenta", name: "Cuenta", component: Cuenta, meta: requiresAuth },
@@ -117,6 +139,19 @@ router.beforeEach((to, from, next) => {
     } catch {
       user = null;
     }
+    if (user?.is_preferred_customer && !user?.can_access_admin_panel) {
+      const preferenteOk =
+        to.path.startsWith("/cliente-preferente") ||
+        to.path.startsWith("/compras-realizadas") ||
+        to.path === "/cuenta" ||
+        to.path.startsWith("/cuenta/") ||
+        to.path === "/profile" ||
+        to.path.startsWith("/profile/");
+      if (!preferenteOk && !to.path.startsWith("/admin")) {
+        next({ path: "/cliente-preferente" });
+        return;
+      }
+    }
     if (user && !user.can_access_admin_panel) {
       if (user.needs_activation_subscription) {
         if (to.name !== "SuscripcionPago") {
@@ -137,7 +172,7 @@ router.beforeEach((to, from, next) => {
       to.query?.sponsor ||
       to.query?.ref ||
       to.query?.codigo;
-    if (to.name === "Signup" && sponsorQuery) {
+    if ((to.name === "Signup" || to.name === "RegistroClientePreferente") && sponsorQuery) {
       next();
       return;
     }
@@ -146,6 +181,14 @@ router.beforeEach((to, from, next) => {
       user = JSON.parse(localStorage.getItem("user") || "null");
     } catch {
       user = null;
+    }
+    if (user?.is_preferred_customer) {
+      if (to.name !== "VerificarCorreo") {
+        next({ path: "/cliente-preferente" });
+        return;
+      }
+      next();
+      return;
     }
     if (user?.needs_activation_subscription) {
       next({ name: "SuscripcionPago" });

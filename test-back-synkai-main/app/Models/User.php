@@ -37,6 +37,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'registration_package_id',
         'preferred_payment_method',
         'activation_paid_at',
+        'account_type',
     ];
 
     protected $hidden = [
@@ -48,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'can_access_admin_panel',
         'needs_activation_subscription',
         'needs_binary_placement',
+        'is_preferred_customer',
     ];
 
     protected function casts(): array
@@ -126,16 +128,29 @@ class User extends Authenticatable implements MustVerifyEmail
     /** Miembro sin pago de activación (pedido con paquete completado). */
     protected function getNeedsActivationSubscriptionAttribute(): bool
     {
-        if ($this->canAccessAdminPanel()) {
+        if ($this->canAccessAdminPanel() || $this->isPreferredCustomer()) {
             return false;
         }
 
         return $this->activation_paid_at === null;
     }
 
+    public function isPreferredCustomer(): bool
+    {
+        return ($this->account_type ?? 'member') === 'preferred_customer';
+    }
+
+    protected function getIsPreferredCustomerAttribute(): bool
+    {
+        return $this->isPreferredCustomer();
+    }
+
     /** Tras activar, elegir pierna bajo el patrocinador en el binario. */
     protected function getNeedsBinaryPlacementAttribute(): bool
     {
+        if ($this->isPreferredCustomer()) {
+            return false;
+        }
         if ($this->canAccessAdminPanel() || ! $this->sponsor_id) {
             return false;
         }

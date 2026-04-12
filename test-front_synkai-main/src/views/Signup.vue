@@ -430,6 +430,12 @@ async function signup() {
                   ¿Ya tienes cuenta?
                   <router-link to="/signin" class="text-dark font-weight-bolder">Iniciar sesión</router-link>
                 </p>
+                <p class="text-sm mt-2 mb-0 text-center text-muted">
+                  ¿Solo quieres comprar como cliente?
+                  <router-link to="/registro-cliente-preferente" class="text-success font-weight-bold"
+                    >Registro cliente preferente</router-link
+                  >
+                </p>
               </form>
             </div>
           </div>
