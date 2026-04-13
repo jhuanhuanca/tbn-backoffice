@@ -28,10 +28,17 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withSchedule(function (Schedule $schedule) {
-        $schedule->call(function () {
-            $weekKey = now()->subWeek()->format('o-\WW');
-            CalculateBinaryCommissionsJob::dispatch($weekKey);
-        })->weekly()->sundays()->at('03:00');
+        if (config('mlm.binary.volume_period', 'monthly') === 'weekly') {
+            $schedule->call(function () {
+                $weekKey = now()->subWeek()->format('o-\WW');
+                CalculateBinaryCommissionsJob::dispatch($weekKey);
+            })->weekly()->sundays()->at('03:00');
+        } else {
+            $schedule->call(function () {
+                $monthKey = now()->subMonth()->format('Y-m');
+                CalculateBinaryCommissionsJob::dispatch($monthKey);
+            })->monthlyOn(1, '03:00');
+        }
 
         $schedule->call(function () {
             $monthKey = now()->subMonth()->format('Y-m');
@@ -41,5 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->call(function () {
             app(RankService::class)->reevaluarTodosLosRangos();
         })->monthlyOn(2, '05:00');
+
+        $schedule->command('mlm:purge-inactive-members')->monthlyOn(7, '06:00');
     })
     ->create();

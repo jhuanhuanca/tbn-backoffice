@@ -22,7 +22,7 @@ class MlmBootstrapSeeder extends Seeder
             'esmeralda' => 'Esmeralda',
             'diamante' => 'Diamante',
             'diamante_ejecutivo' => 'Diamante ejecutivo',
-            'doble_diamante' => 'Doble diamante',
+            'doble_diamante' => 'Diamante doble',
             'triple_diamante' => 'Triple diamante',
             'diamante_corona' => 'Diamante corona',
             'doble_diamante_corona' => 'Doble diamante corona',

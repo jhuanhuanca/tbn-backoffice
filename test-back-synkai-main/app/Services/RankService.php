@@ -6,41 +6,25 @@ use App\Models\Rank;
 use App\Models\User;
 
 /**
- * Motor de rango por PV mensual de calificación (umbrales en config) + orden en tabla ranks.
+ * Motor de rango: carrera post-fundador (CareerRankService) + rangos en BD.
  */
 class RankService
 {
+    public function __construct(
+        protected CareerRankService $careerRankService
+    ) {}
+
     /**
-     * Asigna el mayor rango cuyo umbral de PV mensual cumple el usuario (slug en mlm.residual.rank_thresholds_pv).
+     * Asigna el mayor rango de carrera cuyos requisitos cumple el socio (post-paquete fundador).
      */
     public function sincronizarRangoPorCalificacion(User $user): void
     {
-        $pv = (string) ($user->monthly_qualifying_pv ?? '0');
-        $thresholds = config('mlm.residual.rank_thresholds_pv', []);
-        if ($thresholds === []) {
+        if ($user->canAccessAdminPanel() || $user->isPreferredCustomer()) {
             return;
         }
 
-        uasort($thresholds, fn ($a, $b) => $b <=> $a);
-
-        $slug = null;
-        foreach ($thresholds as $candidateSlug => $min) {
-            if (bccomp($pv, (string) $min, 2) >= 0) {
-                $slug = (string) $candidateSlug;
-                break;
-            }
-        }
-
-        if ($slug === null) {
-            if (config('mlm.rank.allow_downgrade_on_monthly_eval', true)) {
-                $fallback = Rank::query()->orderBy('sort_order')->first();
-                if ($fallback && (int) $user->rank_id !== (int) $fallback->id) {
-                    $user->forceFill(['rank_id' => $fallback->id])->save();
-                }
-            }
-
-            return;
-        }
+        $user->loadMissing('registrationPackage', 'referrals', 'rank');
+        $slug = $this->careerRankService->computeHighestEligibleRankSlug($user);
 
         $rank = Rank::query()->where('slug', $slug)->first();
         if (! $rank) {
@@ -60,7 +44,11 @@ class RankService
     public function reevaluarTodosLosRangos(): int
     {
         $updated = 0;
-        User::query()->chunkById(500, function ($users) use (&$updated) {
+        User::query()
+            ->where(function ($q) {
+                $q->whereNull('account_type')->orWhere('account_type', 'member');
+            })
+            ->chunkById(500, function ($users) use (&$updated) {
             foreach ($users as $user) {
                 $before = $user->rank_id;
                 $this->sincronizarRangoPorCalificacion($user);
@@ -75,7 +63,8 @@ class RankService
 
     public function slugEfectivoParaResidual(User $sponsor): string
     {
-        $pv = (string) ($sponsor->monthly_qualifying_pv ?? '0');
+        $sponsor->loadMissing('referrals');
+        $pv = $this->careerRankService->groupQualifyingPvLight($sponsor);
         $thresholds = config('mlm.residual.rank_thresholds_pv', []);
         if ($thresholds === []) {
             return 'default';

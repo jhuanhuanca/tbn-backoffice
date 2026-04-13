@@ -15,7 +15,8 @@ use Carbon\Carbon;
 class MlmBonusProgressService
 {
     public function __construct(
-        protected BinaryService $binaryService
+        protected BinaryService $binaryService,
+        protected CareerRankService $careerRankService
     ) {}
 
     /**
@@ -36,15 +37,15 @@ class MlmBonusProgressService
             $daysLeftInCycle = max(0, $endD - $day);
         }
 
-        $weekKey = $this->binaryService->weekKey($now);
+        $periodKey = $this->binaryService->volumePeriodKey($now);
         $leftPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', 'left')
             ->value('volume_pv') ?? '0';
         $rightPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', 'right')
             ->value('volume_pv') ?? '0';
 
@@ -53,9 +54,18 @@ class MlmBonusProgressService
         $strongVal = $weak === 'left' ? $rightPv : $leftPv;
         $matchable = bccomp($leftPv, $rightPv, 2) <= 0 ? $leftPv : $rightPv;
 
-        $pvMes = (string) ($user->monthly_qualifying_pv ?? '0');
-        $rankInfo = $this->nextRankThreshold($pvMes);
-        $rankInfo['pv_remaining_to_next'] = $this->pvFaltantesSiguienteRango($pvMes, $rankInfo);
+        $careerStep = $this->careerRankService->describeNextCareerStep($user->loadMissing('registrationPackage', 'referrals.rank', 'rank'));
+        $rankInfo = [
+            'current_pv' => $careerStep['current_group_pv_light'],
+            'next_slug' => $careerStep['next_slug'],
+            'next_threshold_pv' => $careerStep['next_min_group_pv'],
+            'percent' => $careerStep['percent_pv'],
+            'missing_messages' => $careerStep['missing_messages'],
+            'at_career_cap' => $careerStep['at_career_cap'],
+            'pv_remaining_to_next' => $this->pvFaltantesSiguienteRango($careerStep['current_group_pv_light'], [
+                'next_threshold_pv' => $careerStep['next_min_group_pv'],
+            ]),
+        ];
 
         $directosActivos = User::query()
             ->where('sponsor_id', $user->id)
@@ -73,7 +83,8 @@ class MlmBonusProgressService
                 'current_day' => (int) $now->day,
                 'days_remaining_in_cycle' => $daysLeftInCycle,
             ],
-            'binary_week_key' => $weekKey,
+            'binary_week_key' => $periodKey,
+            'binary_volume_period' => $this->binaryService->isMonthlyBinaryVolume() ? 'monthly' : 'weekly',
             'binary_volume' => [
                 'left_pv' => $leftPv,
                 'right_pv' => $rightPv,
@@ -104,21 +115,45 @@ class MlmBonusProgressService
         $percent = $rankInfo['percent'];
 
         if ($nextSlug === null) {
+            $msgs = $rankInfo['missing_messages'] ?? [];
+            if (($rankInfo['at_career_cap'] ?? false) === true) {
+                return [
+                    'percent' => 100.0,
+                    'label' => 'Carrera: Triple Diamante Corona (máximo del plan)',
+                    'subtitle' => 'PV grupo (estimado): '.($rankInfo['current_pv'] ?? '0'),
+                    'next_slug' => null,
+                    'next_threshold_pv' => null,
+                ];
+            }
+            if ($msgs !== []) {
+                return [
+                    'percent' => 0.0,
+                    'label' => 'Acceso a rangos de carrera',
+                    'subtitle' => implode(' · ', $msgs),
+                    'next_slug' => null,
+                    'next_threshold_pv' => null,
+                ];
+            }
+
             return [
                 'percent' => 100.0,
-                'label' => 'Rango máximo alcanzado (según PV actual)',
-                'subtitle' => 'PV actuales: '.($rankInfo['current_pv'] ?? '0'),
+                'label' => 'Rango máximo alcanzado con tus datos actuales',
+                'subtitle' => 'PV grupo (estimado): '.($rankInfo['current_pv'] ?? '0'),
                 'next_slug' => null,
                 'next_threshold_pv' => null,
             ];
         }
 
         $p = $percent !== null ? (float) $percent : 0.0;
+        $extra = isset($rankInfo['missing_messages']) && is_array($rankInfo['missing_messages'])
+            ? implode(' · ', $rankInfo['missing_messages'])
+            : '';
 
         return [
             'percent' => min(100.0, max(0.0, $p)),
-            'label' => 'Ascenso al siguiente rango ('.$nextSlug.')',
-            'subtitle' => 'PV actuales '.$rankInfo['current_pv'].' · meta '.$rankInfo['next_threshold_pv'].' PV',
+            'label' => 'Ascenso a '.$nextSlug,
+            'subtitle' => 'PV grupo (estimado) '.$rankInfo['current_pv'].' · meta PV '.$rankInfo['next_threshold_pv']
+                .($extra !== '' ? ' · '.$extra : ''),
             'next_slug' => $nextSlug,
             'next_threshold_pv' => $rankInfo['next_threshold_pv'] ?? null,
         ];
@@ -278,58 +313,5 @@ class MlmBonusProgressService
         $diff = bcsub((string) $next, $currentPv, 2);
 
         return bccomp($diff, '0', 2) === 1 ? $diff : '0';
-    }
-
-    /**
-     * Siguiente umbral de PV de carrera según config (para barra de progreso).
-     *
-     * @return array{current_pv: string, next_slug: ?string, next_threshold_pv: ?string, percent: float|null}
-     */
-    protected function nextRankThreshold(string $currentPv): array
-    {
-        $thresholds = config('mlm.residual.rank_thresholds_pv', []);
-        if ($thresholds === []) {
-            return [
-                'current_pv' => $currentPv,
-                'next_slug' => null,
-                'next_threshold_pv' => null,
-                'percent' => null,
-            ];
-        }
-
-        asort($thresholds);
-        $nextSlug = null;
-        $nextMin = null;
-        foreach ($thresholds as $slug => $min) {
-            if (bccomp($currentPv, (string) $min, 2) < 0) {
-                $nextSlug = $slug;
-                $nextMin = (string) $min;
-                break;
-            }
-        }
-
-        $percent = null;
-        if ($nextSlug && $nextMin) {
-            $prev = '0';
-            foreach ($thresholds as $slug => $min) {
-                $m = (string) $min;
-                if (bccomp($currentPv, $m, 2) >= 0 && bccomp($m, $prev, 2) >= 0) {
-                    $prev = $m;
-                }
-            }
-            $span = bcsub($nextMin, $prev, 2);
-            $done = bcsub($currentPv, $prev, 2);
-            if (bccomp($span, '0', 2) === 1) {
-                $percent = round((float) bcdiv(bcmul($done, '100', 4), $span, 4), 2);
-                $percent = min(100.0, max(0.0, $percent));
-            }
-        }
-
-        return [
-            'current_pv' => $currentPv,
-            'next_slug' => $nextSlug,
-            'next_threshold_pv' => $nextMin,
-            'percent' => $percent,
-        ];
     }
 }

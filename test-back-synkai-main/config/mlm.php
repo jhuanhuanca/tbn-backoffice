@@ -63,11 +63,12 @@ return [
     ],
 
     /**
-     * Binario: sobre el volumen emparejado (pierna débil) en la semana ISO.
-     * Importe = matched_pv × bob_per_pv × matched_pv_commission_rate
-     * Si MLM_BINARY_LEGACY_FLAT=true, se usa solo payout_per_matched_pv (modo anterior).
+     * Binario: sobre el volumen emparejado (pierna débil).
+     * - weekly: semana ISO (clave o-\WW); carry a la siguiente semana.
+     * - monthly: mes calendario (clave Y-m); carry al mes siguiente (21 % sobre PV emparejado del mes).
      */
     'binary' => [
+        'volume_period' => env('MLM_BINARY_VOLUME_PERIOD', 'monthly'),
         'legacy_flat' => filter_var(env('MLM_BINARY_LEGACY_FLAT', false), FILTER_VALIDATE_BOOL),
         'payout_per_matched_pv' => (string) env('MLM_BINARY_PAYOUT_PER_PV', '1'),
         'bob_per_pv' => (string) env('MLM_BINARY_BOB_PER_PV', env('MLM_BOB_PER_PV', '9')),
@@ -84,7 +85,7 @@ return [
 
     /**
      * Residual unilevel: porcentajes por generación según el rango efectivo del beneficiario.
-     * effective_rank = mayor rango cuyo umbral de PV mensual cumple el usuario (ver rank_thresholds_pv).
+     * effective_rank = mayor rango cuyo umbral de PV de grupo (estimado) cumple el patrocinador (ver rank_thresholds_pv + CareerRankService::groupQualifyingPvLight).
      * Si no hay matriz para el slug, se usa default_generations.
      */
     'residual' => [
@@ -118,7 +119,10 @@ return [
             'doble_diamante_corona' => [1 => 0.12, 2 => 0.09, 3 => 0.09, 4 => 0.06, 5 => 0.03, 6 => 0.03, 7 => 0.03, 8 => 0.03, 9 => 0.03, 10 => 0.03, 11 => 0.03],
             'triple_diamante_corona' => [1 => 0.12, 2 => 0.09, 3 => 0.09, 4 => 0.06, 5 => 0.03, 6 => 0.03, 7 => 0.03, 8 => 0.03, 9 => 0.03, 10 => 0.03, 11 => 0.03, 12 => 0.03],
         ],
-        /** PV mensuales mínimos para “poseer” cada rango a efectos de residual (orden descendente de evaluación). */
+        /**
+         * PV mínimos de grupo (misma magnitud que career.requirements.*.min_group_pv_light) para matriz residual.
+         * Orden interno irrelevante; RankService ordena por valor.
+         */
         'rank_thresholds_pv' => [
             'triple_diamante_corona' => 3_000_000,
             'doble_diamante_corona' => 2_000_000,
@@ -127,20 +131,154 @@ return [
             'doble_diamante' => 240_000,
             'diamante_ejecutivo' => 180_000,
             'diamante' => 120_000,
-            'rubi' => 30_000,
             'esmeralda' => 60_000,
+            'rubi' => 30_000,
             'zafiro' => 15_000,
             'oro' => 7200,
-            'plata' => (float) env('MLM_RANK_PLATA_PV', 1200),
+            'plata' => 3600,
         ],
     ],
 
     /**
-     * Onboarding: requisito para alcanzar rango Plata (mensaje en dashboard hasta lograrlo).
+     * Paquetes de ingreso (solo referencia / copy; el catálogo real está en `packages`).
+     */
+    'package_entry_pv' => [
+        'basico' => 100,
+        'avanzado' => 300,
+        'profesional' => 600,
+        'fundador' => 1200,
+    ],
+
+    /**
+     * Carrera MLM post-fundador: evaluación en CareerRankService (PV grupo ligero, frontales, personal, rangos en directos).
+     */
+    'career' => [
+        'fundador_min_package_pv' => 1200,
+        /** Frontal “activo”: PV mensual de calificación ≥ este valor. */
+        'direct_active_min_pv' => 50,
+        /**
+         * Orden de ascenso (menor → mayor). Debe coincidir con slugs en `ranks` (MlmBootstrapSeeder).
+         */
+        'rank_eval_order' => [
+            'plata',
+            'oro',
+            'zafiro',
+            'rubi',
+            'esmeralda',
+            'diamante',
+            'diamante_ejecutivo',
+            'doble_diamante',
+            'triple_diamante',
+            'diamante_corona',
+            'doble_diamante_corona',
+            'triple_diamante_corona',
+        ],
+        /**
+         * min_group_pv_light = PV propio del mes + PV del mes de patrocinados directos (aprox. de grupo).
+         * min_personal_pv = activación personal mensual en PV del propio usuario.
+         * min_directs_with_rank: en línea directa (sponsor_id = usuario), cuántos con rango ≥ slug.
+         */
+        'requirements' => [
+            'plata' => [
+                'min_group_pv_light' => 3600,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 50,
+                'min_directs_with_rank' => [],
+            ],
+            'oro' => [
+                'min_group_pv_light' => 7200,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 50,
+                'min_directs_with_rank' => [],
+            ],
+            'zafiro' => [
+                'min_group_pv_light' => 15_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 50,
+                'min_directs_with_rank' => [],
+            ],
+            'rubi' => [
+                'min_group_pv_light' => 30_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 50,
+                'min_directs_with_rank' => [],
+            ],
+            'esmeralda' => [
+                'min_group_pv_light' => 60_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 50,
+                'min_directs_with_rank' => [],
+            ],
+            'diamante' => [
+                'min_group_pv_light' => 120_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 50,
+                'min_directs_with_rank' => [],
+            ],
+            'diamante_ejecutivo' => [
+                'min_group_pv_light' => 180_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 100,
+                'min_directs_with_rank' => [
+                    ['slug' => 'diamante', 'min_count' => 1],
+                ],
+            ],
+            'doble_diamante' => [
+                'min_group_pv_light' => 240_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 100,
+                'min_directs_with_rank' => [
+                    ['slug' => 'diamante', 'min_count' => 2],
+                ],
+            ],
+            'triple_diamante' => [
+                'min_group_pv_light' => 360_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 100,
+                'min_directs_with_rank' => [
+                    ['slug' => 'diamante', 'min_count' => 3],
+                ],
+            ],
+            'diamante_corona' => [
+                'min_group_pv_light' => 1_000_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 100,
+                'min_directs_with_rank' => [
+                    ['slug' => 'triple_diamante', 'min_count' => 1],
+                ],
+            ],
+            'doble_diamante_corona' => [
+                'min_group_pv_light' => 2_000_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 100,
+                'min_directs_with_rank' => [
+                    ['slug' => 'triple_diamante', 'min_count' => 2],
+                ],
+            ],
+            'triple_diamante_corona' => [
+                'min_group_pv_light' => 3_000_000,
+                'min_direct_actives' => 2,
+                'min_personal_pv' => 100,
+                'min_directs_with_rank' => [
+                    ['slug' => 'triple_diamante', 'min_count' => 3],
+                ],
+            ],
+        ],
+    ],
+
+    /**
+     * Onboarding: meta PV hacia Plata (ventana de meses).
      */
     'onboarding' => [
-        'plata_pv_required' => (float) env('MLM_ONBOARDING_PLATA_PV', 1200),
+        'plata_pv_required' => (float) env('MLM_ONBOARDING_PLATA_PV', 3600),
         'plata_months_window' => (int) env('MLM_ONBOARDING_PLATA_MONTHS', 3),
+    ],
+
+    /**
+     * Socios sin movimiento MLM en 365 días: eliminación o baja (ver comando mlm:purge-inactive-members).
+     */
+    'inactive_member' => [
+        'days_without_activity' => (int) env('MLM_INACTIVE_PURGE_DAYS', 365),
     ],
 
     /**

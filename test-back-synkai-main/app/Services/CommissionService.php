@@ -232,27 +232,33 @@ class CommissionService
     }
 
     /**
-     * Binario: paga volumen emparejado en pierna débil y guarda carry para la siguiente semana ISO.
+     * Binario: paga volumen emparejado en pierna débil; carry según periodo (semana ISO o mes Y-m).
      */
-    public function calcularBinario(string $weekKey, int $userId, string $matchedPv, string $payoutAmount): void
-    {
+    public function calcularBinario(
+        string $periodKey,
+        int $userId,
+        string $matchedPv,
+        string $payoutAmount,
+        string $periodType = 'weekly'
+    ): void {
         $user = User::query()->find($userId);
         if (! $user || bccomp($payoutAmount, '0', 2) !== 1) {
             return;
         }
 
-        $cap = $this->binaryCapService->aplicarTopePagoBinario($userId, $payoutAmount, $weekKey);
+        $cap = $this->binaryCapService->aplicarTopePagoBinario($userId, $payoutAmount, $periodKey);
         $finalPayout = $cap['amount'];
         if (bccomp($finalPayout, '0', 2) !== 1) {
             return;
         }
 
-        $key = "binary:{$userId}:{$weekKey}";
+        $key = "binary:{$userId}:{$periodKey}";
         $meta = array_merge([
             'matched_pv' => $matchedPv,
             'legacy_flat' => (bool) config('mlm.binary.legacy_flat', false),
             'bob_per_pv' => config('mlm.binary.bob_per_pv'),
             'matched_rate' => config('mlm.binary.matched_pv_commission_rate'),
+            'binary_volume_period' => $periodType,
         ], $cap['meta']);
 
         $this->registrarYAcreditar(
@@ -263,8 +269,8 @@ class CommissionService
             level: null,
             amount: $finalPayout,
             order: null,
-            periodKey: $weekKey,
-            periodType: 'weekly',
+            periodKey: $periodKey,
+            periodType: $periodType,
             meta: $meta
         );
     }

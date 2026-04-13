@@ -11,7 +11,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Cierre semanal del binario: paga pierna débil y persiste carry.
+ * Cierre del binario (semana ISO o mes Y-m según MLM_BINARY_VOLUME_PERIOD): 21 % sobre PV emparejado + carry.
  */
 class CalculateBinaryCommissionsJob implements ShouldQueue
 {

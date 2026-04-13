@@ -11,7 +11,7 @@ import { fetchSponsorByCode } from "@/services/sponsor";
 import { fetchPackages } from "@/services/me";
 import { LATAM_COUNTRIES } from "@/constants/latamCountries";
 import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
-import { STATIC_PACKAGES_CARDS } from "@/constants/landingStaticPackages";
+import MlmPaymentMethodPanel from "@/components/MlmPaymentMethodPanel.vue";
 
 const body = document.getElementsByTagName("body")[0];
 const store = useStore();
@@ -22,7 +22,8 @@ const name = ref("");
 const email = ref("");
 const password = ref("");
 const passwordConfirmation = ref("");
-const documentId = ref("");
+/** CI / NIT — se envía al API como `document_id` (campo obligatorio ci_nit en negocio). */
+const ciNit = ref("");
 const phone = ref("");
 const birthDate = ref("");
 const sponsorReferralCode = ref("");
@@ -37,7 +38,6 @@ const selectedPackageId = ref("");
 const countryCode = ref("BO");
 const paymentMethod = ref("transferencia");
 const paymentOptions = REGISTRATION_PAYMENT_METHODS;
-const staticPackages = STATIC_PACKAGES_CARDS;
 
 function applyPackageFromQuery() {
   const pkg = route.query.package;
@@ -52,19 +52,6 @@ function applyPackageFromQuery() {
       selectedPackageId.value = String(found.id);
     }
   }
-}
-
-function selectStaticPackage(card) {
-  const found = packagesList.value.find((p) => p.slug === card.slug);
-  if (found) {
-    selectedPackageId.value = String(found.id);
-  }
-}
-
-function isStaticPackageSelected(card) {
-  const p = packagesList.value.find((x) => x.slug === card.slug);
-  if (!p) return false;
-  return selectedPackageId.value === String(p.id);
 }
 
 onBeforeMount(() => {
@@ -148,10 +135,39 @@ async function validateSponsor() {
   }
 }
 
+function validateCiNit(v) {
+  const s = String(v || "").trim();
+  if (!s) return "El CI / NIT es obligatorio.";
+  if (s.length < 5 || s.length > 32) return "CI / NIT: entre 5 y 32 caracteres.";
+  if (!/^[A-Za-z0-9.-]+$/.test(s)) return "CI / NIT: solo letras, números, punto y guion.";
+  return "";
+}
+
+function validateEmailFormat(v) {
+  const s = String(v || "").trim();
+  if (!s) return "El correo es obligatorio.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return "Introduce un correo electrónico válido.";
+  return "";
+}
+
 async function signup() {
   error.value = "";
   if (!terms.value) {
     error.value = "Debe aceptar los términos y condiciones.";
+    return;
+  }
+  const ciErr = validateCiNit(ciNit.value);
+  if (ciErr) {
+    error.value = ciErr;
+    return;
+  }
+  const emErr = validateEmailFormat(email.value);
+  if (emErr) {
+    error.value = emErr;
+    return;
+  }
+  if (password.value.length < 8) {
+    error.value = "La contraseña debe tener al menos 8 caracteres.";
     return;
   }
   if (password.value !== passwordConfirmation.value) {
@@ -173,7 +189,7 @@ async function signup() {
       email: email.value.trim(),
       password: password.value,
       password_confirmation: passwordConfirmation.value,
-      document_id: documentId.value.trim(),
+      document_id: ciNit.value.trim(),
       phone: phone.value.trim(),
       birth_date: birthDate.value,
     };
@@ -215,16 +231,16 @@ async function signup() {
 </script>
 
 <template>
-  <div>
-  <div class="container top-0 position-sticky z-index-sticky">
-    <div class="row">
-      <div class="col-12">
-        <navbar isBtn="bg-gradient-light" />
-      </div>
+  <div class="auth-shell min-vh-100 d-flex flex-column">
+    <div class="container top-0 position-sticky z-index-sticky px-2 px-sm-3">
+      <navbar
+        isBlur="blur border-radius-lg my-3 py-2 start-0 end-0 mx-3 mx-sm-4 shadow"
+        :darkMode="true"
+        isBtn="bg-gradient-success"
+      />
     </div>
-  </div>
 
-  <main class="main-content mt-0">
+  <main class="main-content mt-0 pb-5">
     <div
       class="page-header align-items-start min-vh-50 pt-10 pb-11 m-3 border-radius-lg"
       style="position: relative; overflow: hidden"
@@ -259,46 +275,25 @@ async function signup() {
       </div>
     </div>
 
-    <div class="container">
+    <div class="container px-3">
       <div class="row mt-lg-n10 mt-md-n11 mt-n10 justify-content-center">
-        <div class="col-xl-10 col-lg-11 mx-auto">
-          <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body p-4">
-              <h6 class="text-dark font-weight-bolder mb-3 text-center">Paquetes destacados (misma oferta que la landing)</h6>
-              <div class="row g-2">
-                <div v-for="card in staticPackages" :key="card.slug" class="col-6 col-md-3">
-                  <button
-                    type="button"
-                    class="btn w-100 btn-sm"
-                    :class="isStaticPackageSelected(card) ? 'btn-success' : 'btn-outline-primary'"
-                    @click="selectStaticPackage(card)"
-                  >
-                    <span class="d-block text-xs font-weight-bold">{{ card.name }}</span>
-                    <span class="d-block text-xxs text-muted">{{ card.priceDisplay }}</span>
-                  </button>
-                </div>
-              </div>
-              <p class="text-xxs text-muted text-center mt-2 mb-0">
-                Si el catálogo API aún no está cargado, elige el paquete en el desplegable inferior.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div class="col-xl-5 col-lg-6 col-md-8 mx-auto">
-          <div class="card z-index-0">
-            <div class="card-header text-center pt-4">
+        <div class="col-xl-6 col-lg-7 col-md-10 mx-auto">
+          <div class="card border-0 shadow-lg signup-card z-index-0">
+            <div class="card-header text-center bg-white border-0 pt-4 pb-0">
               <img
                 src="@/assets/img/synkailogo2.png"
                 alt="Logo"
-                class="mb-2 mt-3"
-                style="max-width: 180px; height: auto"
+                class="mb-2 mt-2 signup-card__logo"
+                width="176"
+                height="auto"
               />
-              <h5 class="text-dark">Inscripción</h5>
+              <h5 class="text-dark font-weight-bolder mb-1">Inscripción socio</h5>
+              
             </div>
-            <div class="card-body">
-              <h6 class="text-sm text-muted mb-2">Paquete de inscripción y pago</h6>
+            <div class="card-body px-4 pb-2">
+              <h6 class="text-sm text-dark font-weight-bolder mb-3">Paquete y país</h6>
               <div class="mb-3">
-                <label class="form-label text-sm">Paquete (opcional; puedes comprarlo después)</label>
+                <label class="form-label text-sm mb-1">Paquete (opcional; puedes activarlo después)</label>
                 <select v-model="selectedPackageId" class="form-select">
                   <option value="">— Elegir después —</option>
                   <option v-for="p in packagesList" :key="p.id" :value="String(p.id)">
@@ -307,15 +302,15 @@ async function signup() {
                 </select>
               </div>
               <div class="mb-3">
-                <label class="form-label text-sm">Forma de pago preferida</label>
+                <label class="form-label text-sm mb-1">Forma de pago preferida</label>
                 <select v-model="paymentMethod" class="form-select">
                   <option v-for="opt in paymentOptions" :key="opt.value" :value="opt.value">
                     {{ opt.label }}
                   </option>
                 </select>
               </div>
-              <div class="mb-3">
-                <label class="form-label text-sm">País</label>
+              <div class="mb-4">
+                <label class="form-label text-sm mb-1">País</label>
                 <select v-model="countryCode" class="form-select">
                   <option v-for="c in LATAM_COUNTRIES" :key="c.code" :value="c.code">
                     {{ c.flag }} {{ c.name }}
@@ -323,14 +318,7 @@ async function signup() {
                 </select>
               </div>
 
-              <div class="mb-3 p-3 rounded bg-gray-100">
-                <p class="text-xs font-weight-bold text-dark mb-2">Medios de pago (misma lista que la landing)</p>
-                <div class="row g-1">
-                  <div v-for="opt in paymentOptions" :key="opt.value" class="col-12">
-                    <span class="text-xxs text-secondary"><i class="ni ni-check-bold text-success me-1"></i>{{ opt.label }}</span>
-                  </div>
-                </div>
-              </div>
+              <MlmPaymentMethodPanel v-model="paymentMethod" :show-method-select="false" title="Detalle del método de pago" />
 
               <div
                 v-if="sponsorReferralCode"
@@ -347,9 +335,10 @@ async function signup() {
                 <template v-else>Ingresa un código válido o continúa sin patrocinador.</template>
               </div>
 
-              <form @submit.prevent="signup">
+              <form @submit.prevent="signup" class="mt-4">
+                <h6 class="text-sm text-dark font-weight-bolder mb-3">Datos personales</h6>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Código de patrocinador (opcional)</label>
+                  <label class="form-label text-sm mb-1">Código de patrocinador (opcional)</label>
                   <argon-input
                     v-model="sponsorReferralCode"
                     id="sponsor"
@@ -366,31 +355,32 @@ async function signup() {
                   </button>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Nombre completo</label>
+                  <label class="form-label text-sm mb-1">Nombre completo <span class="text-danger">*</span></label>
                   <argon-input v-model="name" id="name" type="text" placeholder="Nombre y apellidos" />
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Correo electrónico</label>
+                  <label class="form-label text-sm mb-1">Correo electrónico <span class="text-danger">*</span></label>
                   <argon-input v-model="email" id="email" type="email" placeholder="correo@empresa.com" />
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">CI / NIT</label>
-                  <argon-input v-model="documentId" id="doc" type="text" placeholder="Documento de identidad" />
+                  <label class="form-label text-sm mb-1">CI / NIT (ci_nit) <span class="text-danger">*</span></label>
+                  <argon-input v-model="ciNit" id="ciNit" type="text" placeholder="Ej. 1234567 LP o NIT" />
+                  <p class="text-xxs text-muted mb-0 mt-1">Obligatorio. Se guarda como documento de identidad en el sistema.</p>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Teléfono</label>
+                  <label class="form-label text-sm mb-1">Teléfono</label>
                   <argon-input v-model="phone" id="phone" type="text" placeholder="Celular o fijo" />
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Fecha de nacimiento</label>
+                  <label class="form-label text-sm mb-1">Fecha de nacimiento</label>
                   <argon-input v-model="birthDate" id="bd" type="date" placeholder="" />
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Contraseña (mín. 8 caracteres)</label>
+                  <label class="form-label text-sm mb-1">Contraseña (mín. 8) <span class="text-danger">*</span></label>
                   <argon-input v-model="password" id="password" type="password" placeholder="Contraseña" />
                 </div>
                 <div class="mb-3">
-                  <label class="form-label text-sm">Confirmar contraseña</label>
+                  <label class="form-label text-sm mb-1">Confirmar contraseña <span class="text-danger">*</span></label>
                   <argon-input
                     v-model="passwordConfirmation"
                     id="password2"
@@ -413,12 +403,12 @@ async function signup() {
 
                 <p v-if="error" class="text-danger mt-2 text-sm">{{ error }}</p>
 
-                <div class="text-center">
+                <div class="d-grid pt-2">
                   <argon-button
                     fullWidth
                     color="dark"
                     variant="gradient"
-                    class="my-4 mb-2"
+                    class="mb-2"
                     type="submit"
                     :disabled="loading"
                   >
@@ -446,3 +436,16 @@ async function signup() {
   <app-footer />
   </div>
 </template>
+
+<style scoped>
+.signup-card {
+  border-radius: 1rem;
+}
+.signup-card__logo {
+  max-width: 180px;
+  height: auto;
+}
+.text-xxs {
+  font-size: 0.65rem;
+}
+</style>

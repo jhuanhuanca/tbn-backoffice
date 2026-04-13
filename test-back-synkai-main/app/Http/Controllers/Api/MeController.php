@@ -27,18 +27,18 @@ class MeController extends Controller
         /** @var User $user */
         $user = $request->user()->loadMissing('rank', 'sponsor');
 
-        $weekKey = $binaryService->weekKey(now());
-        $prevKey = $binaryService->previousWeekKey($weekKey);
+        $periodKey = $binaryService->volumePeriodKey(now());
+        $prevKey = $binaryService->previousVolumePeriodKey($periodKey);
 
         $leftPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', 'left')
             ->value('volume_pv') ?? '0';
 
         $rightPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', 'right')
             ->value('volume_pv') ?? '0';
 
@@ -79,7 +79,8 @@ class MeController extends Controller
             ],
             'referrals_direct_count' => $directCount,
             'binary_week' => [
-                'week_key' => $weekKey,
+                'week_key' => $periodKey,
+                'volume_period' => $binaryService->isMonthlyBinaryVolume() ? 'monthly' : 'weekly',
                 'left_pv' => $leftPv,
                 'right_pv' => $rightPv,
                 'left_carry_in' => $carry ? (string) $carry->left_carry_pv : '0',
@@ -107,6 +108,7 @@ class MeController extends Controller
                 'member_code' => $u->member_code,
                 'pierna' => $leg,
                 'fecha_alta' => $u->created_at?->format('d/m/Y'),
+                'joined_at' => $u->created_at?->toIso8601String(),
                 'monthly_qualifying_pv' => $u->monthly_qualifying_pv,
                 'account_status' => $u->account_status,
                 'rank_name' => $u->rank?->name ?? '—',
@@ -137,24 +139,24 @@ class MeController extends Controller
     {
         /** @var User $user */
         $user = $request->user()->loadMissing('rank');
-        $weekKey = $binaryService->weekKey(now());
+        $periodKey = $binaryService->volumePeriodKey(now());
 
         $leftPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', 'left')
             ->value('volume_pv') ?? '0';
 
         $rightPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', 'right')
             ->value('volume_pv') ?? '0';
 
         $binaryEarningsWeek = (string) CommissionEvent::query()
             ->where('beneficiary_user_id', $user->id)
             ->where('type', 'binary')
-            ->where('period_key', $weekKey)
+            ->where('period_key', $periodKey)
             ->sum('amount');
 
         $birByLevel = [];
@@ -179,7 +181,8 @@ class MeController extends Controller
         $rankName = $user->rank?->name ?? '—';
 
         return response()->json([
-            'week_key' => $weekKey,
+            'week_key' => $periodKey,
+            'volume_period' => $binaryService->isMonthlyBinaryVolume() ? 'monthly' : 'weekly',
             'wallet_available' => $walletService->saldoDisponible($user),
             'stats' => [
                 'left_pv' => $leftPv,

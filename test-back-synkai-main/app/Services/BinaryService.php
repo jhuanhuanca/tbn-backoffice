@@ -21,6 +21,37 @@ class BinaryService
         return $date->format('o-\WW');
     }
 
+    public function isMonthlyBinaryVolume(): bool
+    {
+        return config('mlm.binary.volume_period', 'monthly') !== 'weekly';
+    }
+
+    /**
+     * Periodo de acumulación de volumen binario (clave en tablas binary_leg_volume_weekly / carry / order_binary_volume_applied.week_key).
+     */
+    public function volumePeriodKey(Carbon $date): string
+    {
+        if ($this->isMonthlyBinaryVolume()) {
+            return $date->format('Y-m');
+        }
+
+        return $this->weekKey($date);
+    }
+
+    public function binaryPeriodTypeForClosure(): string
+    {
+        return $this->isMonthlyBinaryVolume() ? 'monthly' : 'weekly';
+    }
+
+    public function previousVolumePeriodKey(string $periodKey): string
+    {
+        if ($this->isMonthlyBinaryVolume() && preg_match('/^\d{4}-\d{2}$/', $periodKey)) {
+            return Carbon::createFromFormat('Y-m', $periodKey)->subMonth()->format('Y-m');
+        }
+
+        return $this->previousWeekKey($periodKey);
+    }
+
     public function previousWeekKey(string $weekKey): string
     {
         if (! preg_match('/^(\d{4})-W(\d{2})$/', $weekKey, $m)) {
@@ -77,24 +108,24 @@ class BinaryService
             return;
         }
 
-        $weekKey = $order->completed_at
-            ? $this->weekKey(Carbon::parse($order->completed_at))
-            : $this->weekKey(now());
+        $periodKey = $order->completed_at
+            ? $this->volumePeriodKey(Carbon::parse($order->completed_at))
+            : $this->volumePeriodKey(now());
 
         $chain = $this->ancestrosBinarioConPierna($order->user_id);
         if ($chain === []) {
             return;
         }
 
-        DB::transaction(function () use ($order, $pv, $weekKey, $chain) {
+        DB::transaction(function () use ($order, $pv, $periodKey, $chain) {
             foreach ($chain as $hop) {
-                $this->incrementarVolumenPierna((int) $hop['user_id'], $weekKey, (string) $hop['leg'], $pv);
+                $this->incrementarVolumenPierna((int) $hop['user_id'], $periodKey, (string) $hop['leg'], $pv);
                 $this->olvidarCacheArbol((int) $hop['user_id']);
             }
 
             OrderBinaryVolumeApplied::query()->create([
                 'order_id' => $order->id,
-                'week_key' => $weekKey,
+                'week_key' => $periodKey,
                 'applied_at' => now(),
             ]);
         });
@@ -102,12 +133,13 @@ class BinaryService
         $this->olvidarCacheArbol($order->user_id);
     }
 
-    public function procesarCierreSemanal(string $weekKey, CommissionService $commissionService): void
+    public function procesarCierreSemanal(string $periodKey, CommissionService $commissionService): void
     {
+        $closureType = $this->binaryPeriodTypeForClosure();
         $closure = PeriodClosure::query()->firstOrCreate(
             [
-                'period_type' => 'weekly',
-                'period_key' => $weekKey,
+                'period_type' => $closureType,
+                'period_key' => $periodKey,
                 'scope' => 'binary',
             ],
             ['status' => 'pending']
@@ -119,14 +151,14 @@ class BinaryService
 
         $closure->update(['status' => 'running', 'started_at' => now()]);
 
-        $prevKey = $this->previousWeekKey($weekKey);
+        $prevKey = $this->previousVolumePeriodKey($periodKey);
         $legacyFlat = (bool) config('mlm.binary.legacy_flat', false);
         $bobPerPv = (string) config('mlm.binary.bob_per_pv', config('mlm.pv_value.bob_per_pv', '9'));
         $binaryRate = (string) config('mlm.binary.matched_pv_commission_rate', '0.21');
         $payoutPerPv = (string) config('mlm.binary.payout_per_matched_pv', '1');
 
         $parentIdsVol = BinaryLegVolumeWeekly::query()
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->distinct()
             ->pluck('parent_user_id');
 
@@ -137,8 +169,8 @@ class BinaryService
         $allParents = $parentIdsVol->merge($parentIdsCarry)->unique()->filter();
 
         foreach ($allParents as $parentId) {
-            $rawL = $this->volumenPierna((int) $parentId, $weekKey, BinaryPlacement::LEG_LEFT);
-            $rawR = $this->volumenPierna((int) $parentId, $weekKey, BinaryPlacement::LEG_RIGHT);
+            $rawL = $this->volumenPierna((int) $parentId, $periodKey, BinaryPlacement::LEG_LEFT);
+            $rawR = $this->volumenPierna((int) $parentId, $periodKey, BinaryPlacement::LEG_RIGHT);
 
             $carry = BinaryWeeklyCarry::query()
                 ->where('user_id', $parentId)
@@ -165,7 +197,7 @@ class BinaryService
             BinaryWeeklyCarry::query()->updateOrCreate(
                 [
                     'user_id' => $parentId,
-                    'week_key' => $weekKey,
+                    'week_key' => $periodKey,
                 ],
                 [
                     'left_carry_pv' => bcadd($outL, '0', 2),
@@ -174,24 +206,30 @@ class BinaryService
             );
 
             if (bccomp($payout, '0', 2) === 1) {
-                $commissionService->calcularBinario($weekKey, (int) $parentId, bcadd($paidVol, '0', 2), $payout);
+                $commissionService->calcularBinario(
+                    $periodKey,
+                    (int) $parentId,
+                    bcadd($paidVol, '0', 2),
+                    $payout,
+                    $closureType
+                );
             }
         }
 
         $closure->update([
             'status' => 'finished',
             'finished_at' => now(),
-            'meta' => ['parents_processed' => $allParents->count()],
+            'meta' => ['parents_processed' => $allParents->count(), 'volume_period' => $closureType],
         ]);
 
-        Log::info('MLM cierre binario', ['week' => $weekKey, 'parents' => $allParents->count()]);
+        Log::info('MLM cierre binario', ['period' => $periodKey, 'type' => $closureType, 'parents' => $allParents->count()]);
     }
 
-    protected function incrementarVolumenPierna(int $parentUserId, string $weekKey, string $leg, string $pv): void
+    protected function incrementarVolumenPierna(int $parentUserId, string $periodKey, string $leg, string $pv): void
     {
         $row = BinaryLegVolumeWeekly::query()->firstOrNew([
             'parent_user_id' => $parentUserId,
-            'week_key' => $weekKey,
+            'week_key' => $periodKey,
             'leg_position' => $leg,
         ]);
 
@@ -199,11 +237,11 @@ class BinaryService
         $row->save();
     }
 
-    protected function volumenPierna(int $parentUserId, string $weekKey, string $leg): string
+    protected function volumenPierna(int $parentUserId, string $periodKey, string $leg): string
     {
         $row = BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $parentUserId)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', $leg)
             ->first();
 

@@ -3,6 +3,7 @@ import { ref, computed, onBeforeMount, onBeforeUnmount, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useStore } from "vuex";
 import ArgonButton from "@/components/ArgonButton.vue";
+import MlmPaymentMethodPanel from "@/components/MlmPaymentMethodPanel.vue";
 import { fetchPackages, createOrder, fetchProfile } from "@/services/me";
 import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
 
@@ -136,6 +137,12 @@ async function confirmarActivacion() {
                   </option>
                 </select>
               </div>
+              <MlmPaymentMethodPanel
+                v-model="paymentMethod"
+                :show-method-select="false"
+                title="Instrucciones de pago y entrega"
+                class="mb-3"
+              />
               <div v-if="selectedPkg" class="alert alert-light border text-sm mb-3">
                 <strong>{{ selectedPkg.name }}</strong><br />
                 PV: {{ selectedPkg.pv_points }} · Precio: Bs. {{ selectedPkg.price }}

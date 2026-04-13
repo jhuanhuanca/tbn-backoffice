@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Order;
+use App\Models\User;
 use App\Services\BinaryService;
 use App\Services\CommissionEngine;
 use App\Services\CommissionService;
@@ -38,6 +39,8 @@ class ProcessOrderMlmAccrualsJob implements ShouldQueue
         if (! $order || $order->estado !== 'completado') {
             return;
         }
+
+        User::query()->whereKey($order->user_id)->update(['last_mlm_activity_at' => now()]);
 
         $buyer = $order->user;
         if ($buyer && $buyer->isPreferredCustomer()) {

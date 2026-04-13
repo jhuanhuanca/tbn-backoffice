@@ -51,15 +51,15 @@ class UserQualificationService
 
     protected function persistirSnapshotMensual(User $user, string $month, string $qualifyingPv): void
     {
-        $weekKey = $this->binaryService->weekKey(now());
+        $periodKey = $this->binaryService->volumePeriodKey(now());
         $leftPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', BinaryPlacement::LEG_LEFT)
             ->value('volume_pv') ?? '0';
         $rightPv = (string) BinaryLegVolumeWeekly::query()
             ->where('parent_user_id', $user->id)
-            ->where('week_key', $weekKey)
+            ->where('week_key', $periodKey)
             ->where('leg_position', BinaryPlacement::LEG_RIGHT)
             ->value('volume_pv') ?? '0';
 
@@ -78,7 +78,8 @@ class UserQualificationService
                 'binary_left_pv' => (float) ($leftPv ?? 0),
                 'binary_right_pv' => (float) ($rightPv ?? 0),
                 'meta' => [
-                    'binary_week_key' => $weekKey,
+                    'binary_volume_period_key' => $periodKey,
+                    'binary_volume_period' => $this->binaryService->isMonthlyBinaryVolume() ? 'monthly' : 'weekly',
                 ],
             ]
         );

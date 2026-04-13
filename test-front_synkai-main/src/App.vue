@@ -52,14 +52,21 @@ const hideConfigButton = computed(() => store.state.hideConfigButton);
 const toggleConfigurator = () => store.commit("toggleConfigurator");
 
 const isPinned = computed(() => store.state.isPinned);
-const showSidenavOverlay = computed(() => isPinned.value && isMobile.value && showSidenav.value && layout.value === "default");
+const showSidenavOverlay = computed(
+  () =>
+    isPinned.value &&
+    isMobile.value &&
+    showSidenav.value &&
+    layout.value === "default"
+);
 
+/** Solo aplicar márgenes de sidebar cuando el sidenav existe; si no, el main debe ser ancho completo (signin/signup). */
 const sidenavWrapperClass = computed(() => {
-  const isDefaultLayout = layout.value === "default";
+  const shellActive = layout.value === "default" && showSidenav.value;
   return {
-    "g-sidenav-show": isDefaultLayout,
-    "g-sidenav-hidden": isDefaultLayout && !isPinned.value,
-    "g-sidenav-pinned": isDefaultLayout && isPinned.value,
+    "g-sidenav-show": shellActive,
+    "g-sidenav-hidden": shellActive && !isPinned.value,
+    "g-sidenav-pinned": shellActive && isPinned.value,
   };
 });
 

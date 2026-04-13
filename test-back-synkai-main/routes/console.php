@@ -11,11 +11,22 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Artisan::command('mlm:close-binary {periodKey?}', function (?string $periodKey) {
+    $key = $periodKey;
+    if ($key === null || $key === '') {
+        $key = config('mlm.binary.volume_period', 'monthly') === 'weekly'
+            ? now()->subWeek()->format('o-\WW')
+            : now()->subMonth()->format('Y-m');
+    }
+    CalculateBinaryCommissionsJob::dispatchSync($key);
+    $this->info("Cierre binario ejecutado (sync) para {$key}");
+})->purpose('Cierre binario (pierna débil 21 % + carry): mes Y-m por defecto, o semana ISO si MLM_BINARY_VOLUME_PERIOD=weekly');
+
 Artisan::command('mlm:close-weekly-binary {weekKey?}', function (?string $weekKey) {
     $key = $weekKey ?? now()->subWeek()->format('o-\WW');
     CalculateBinaryCommissionsJob::dispatchSync($key);
-    $this->info("Cierre binario ejecutado (sync) para {$key}");
-})->purpose('Cierre semanal del binario (pierna débil + carry)');
+    $this->info("Cierre binario (semana ISO) ejecutado para {$key}");
+})->purpose('Alias retrocompatible: cierre binario semanal ISO');
 
 Artisan::command('mlm:close-monthly-residual {monthKey?}', function (?string $monthKey) {
     $key = $monthKey ?? now()->subMonth()->format('Y-m');

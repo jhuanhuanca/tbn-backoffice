@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
 import ArgonButton from "@/components/ArgonButton.vue";
+import MlmPaymentMethodPanel from "@/components/MlmPaymentMethodPanel.vue";
 import { fetchProductsCatalog, createOrder, fetchOrders, fetchProfile } from "@/services/me";
 
 const store = useStore();
@@ -12,6 +13,11 @@ const orders = ref([]);
 const carrito = ref([]);
 const checkoutLoading = ref(false);
 const checkoutMsg = ref("");
+const paymentMethod = ref("transferencia");
+
+const paymentSettlement = computed(() =>
+  ["tarjeta", "online"].includes(paymentMethod.value) ? "immediate" : "manual"
+);
 
 const totalCarrito = computed(() =>
   carrito.value.reduce((s, it) => s + Number(it.precio) * Number(it.cantidad), 0)
@@ -71,17 +77,20 @@ async function checkout() {
   checkoutLoading.value = true;
   checkoutMsg.value = "";
   try {
-    await createOrder({
+    const order = await createOrder({
       tipo: "producto",
-      payment_settlement: "immediate",
-      payment_method: "online",
+      payment_settlement: paymentSettlement.value,
+      payment_method: paymentMethod.value,
       items: carrito.value.map((it) => ({
         product_id: it.id,
         cantidad: it.cantidad,
       })),
     });
     carrito.value = [];
-    checkoutMsg.value = "Pedido registrado. Gracias por tu compra.";
+    checkoutMsg.value =
+      order?.estado === "pendiente_pago"
+        ? "Pedido registrado como pendiente de pago. La empresa confirmará según tu método (transferencia, QR, etc.)."
+        : "Pedido registrado. Gracias por tu compra.";
     await load();
   } catch (e) {
     checkoutMsg.value = e.response?.data?.message || "Error al crear el pedido.";
@@ -187,6 +196,13 @@ function formatBs(n) {
             </ul>
             <p v-else class="text-sm text-muted">Vacío</p>
             <p v-if="carrito.length" class="text-sm font-weight-bold">Total: {{ formatBs(totalCarrito) }}</p>
+            <div v-if="carrito.length" class="mb-3">
+              <MlmPaymentMethodPanel
+                v-model="paymentMethod"
+                :show-method-select="true"
+                title="Pago y entrega"
+              />
+            </div>
             <argon-button
               color="dark"
               class="w-100"

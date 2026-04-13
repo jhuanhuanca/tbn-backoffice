@@ -162,14 +162,7 @@ body {
 }
 
 // Navbar y contenido del dashboard: que no provoquen scroll horizontal
-.navbar-main {
-  max-width: 100%;
-  overflow-x: hidden;
-}
-.navbar-main .container-fluid {
-  max-width: 100%;
-  flex-wrap: wrap;
-}
+
 
 // Navbar toggler blanco en navbar oscuro (dashboard)
 .navbar-main .navbar-toggler .navbar-toggler-bar {

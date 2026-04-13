@@ -42,7 +42,14 @@ function formatPv(v) {
 function estadoLabel(status) {
   if (status === "active") return "Activo";
   if (status === "pending") return "Pendiente";
-  return status || "—";
+  if (status === "inactive") return "Inactivo";
+  return status ? String(status) : "—";
+}
+
+function legSortKey(pierna) {
+  if (pierna === "left") return 0;
+  if (pierna === "right") return 1;
+  return 2;
 }
 
 const referidos = computed(() =>
@@ -51,52 +58,70 @@ const referidos = computed(() =>
     nombre: r.name,
     email: r.email,
     fechaAlta: r.fecha_alta,
+    joinedAtMs: r.joined_at ? Date.parse(r.joined_at) : 0,
     pierna: r.pierna,
     volumen: formatPv(r.monthly_qualifying_pv),
     estado: estadoLabel(r.account_status),
+    estadoRaw: r.account_status,
     rango: r.rank_name || "—",
     iniciales: iniciales(r.name),
+    memberCode: r.member_code || "—",
   }))
 );
 
-const referidosIzquierda = computed(() => referidos.value.filter((r) => r.pierna === "left"));
-const referidosDerecha = computed(() => referidos.value.filter((r) => r.pierna === "right"));
-const sinPierna = computed(() => referidos.value.filter((r) => !r.pierna));
+/** Un nivel: todos los directos, orden por fecha de ingreso (más reciente primero), luego pierna I/D. */
+const referidosOrdenados = computed(() => {
+  return [...referidos.value].sort((a, b) => {
+    if (b.joinedAtMs !== a.joinedAtMs) return b.joinedAtMs - a.joinedAtMs;
+    return legSortKey(a.pierna) - legSortKey(b.pierna);
+  });
+});
 
 const stats = computed(() => ({
   total: summary.value.total ?? referidos.value.length,
-  izquierda: summary.value.izquierda ?? referidosIzquierda.value.length,
-  derecha: summary.value.derecha ?? referidosDerecha.value.length,
-  activos: summary.value.activos ?? referidos.value.filter((r) => r.estado === "Activo").length,
+  izquierda: summary.value.izquierda ?? referidos.value.filter((r) => r.pierna === "left").length,
+  derecha: summary.value.derecha ?? referidos.value.filter((r) => r.pierna === "right").length,
+  activos: summary.value.activos ?? referidos.value.filter((r) => r.estadoRaw === "active").length,
+  pendientes: summary.value.pendientes ?? referidos.value.filter((r) => r.estadoRaw === "pending").length,
 }));
+
+function piernaEtiqueta(p) {
+  if (p === "left") return "Izquierda";
+  if (p === "right") return "Derecha";
+  return "Sin pierna";
+}
+
+function badgeClaseEstado(ref) {
+  if (ref.estadoRaw === "active") return "bg-gradient-success";
+  if (ref.estadoRaw === "pending") return "bg-gradient-warning";
+  return "bg-gradient-secondary";
+}
 </script>
 
 <template>
-  <div class="py-4 container-fluid">
+  <div class="py-4 container-fluid referidos-page">
     <div class="row mb-4">
       <div class="col-12">
-        <div class="card border-0 shadow">
-          <div class="p-4 card-body">
-            <h4 class="mb-2 text-dark font-weight-bolder">Referidos directos</h4>
+        <div class="card border-0 shadow-sm referidos-page__intro">
+          <div class="card-body p-4">
+            <h4 class="mb-2 text-dark font-weight-bolder">Red unilevel — primer nivel</h4>
             <p class="mb-0 text-sm text-secondary">
-              Socios registrados con tu código de patrocinador (datos desde la base de datos).
+              Socios patrocinados directamente por ti. Orden: fecha de ingreso (más reciente primero), luego pierna
+              binaria si ya está colocada.
             </p>
             <p v-if="error" class="text-danger text-sm mt-2 mb-0">{{ error }}</p>
             <p v-else-if="loading" class="text-muted text-sm mt-2 mb-0">Cargando…</p>
-            <p v-if="sinPierna.length" class="text-warning text-xs mt-2 mb-0">
-              {{ sinPierna.length }} referido(s) sin pierna binaria asignada aún.
-            </p>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="row">
-      <div class="col-lg-3 col-md-6 col-12">
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-6 col-xl-3">
         <mini-statistics-card
-          title="Total referidos"
+          title="Directos"
           :value="String(stats.total)"
-          description="<span class='text-sm font-weight-bolder text-primary'>Directos</span> en tu red"
+          description="<span class='text-sm font-weight-bolder text-primary'>Primer nivel</span>"
           :icon="{
             component: 'ni ni-single-02',
             background: 'bg-gradient-primary',
@@ -104,37 +129,37 @@ const stats = computed(() => ({
           }"
         />
       </div>
-      <div class="col-lg-3 col-md-6 col-12">
+      <div class="col-6 col-md-6 col-xl-3">
         <mini-statistics-card
-          title="Pierna izquierda"
-          :value="String(stats.izquierda)"
-          description="<span class='text-sm font-weight-bolder text-info'>Referidos</span> en izquierda"
+          title="Activos"
+          :value="String(stats.activos)"
+          description="<span class='text-sm font-weight-bolder text-success'>Cuenta activa</span>"
           :icon="{
-            component: 'ni ni-bold-left',
-            background: 'bg-gradient-info',
-            shape: 'rounded-circle',
-          }"
-        />
-      </div>
-      <div class="col-lg-3 col-md-6 col-12">
-        <mini-statistics-card
-          title="Pierna derecha"
-          :value="String(stats.derecha)"
-          description="<span class='text-sm font-weight-bolder text-success'>Referidos</span> en derecha"
-          :icon="{
-            component: 'ni ni-bold-right',
+            component: 'ni ni-check-bold',
             background: 'bg-gradient-success',
             shape: 'rounded-circle',
           }"
         />
       </div>
-      <div class="col-lg-3 col-md-6 col-12">
+      <div class="col-6 col-md-6 col-xl-3">
         <mini-statistics-card
-          title="Activos"
-          :value="String(stats.activos)"
-          description="<span class='text-sm font-weight-bolder text-warning'>Cuenta activa</span>"
+          title="Pierna I / D"
+          :value="`${stats.izquierda} / ${stats.derecha}`"
+          description="<span class='text-sm font-weight-bolder text-info'>Colocados</span>"
           :icon="{
-            component: 'ni ni-check-bold',
+            component: 'ni ni-chart-pie-35',
+            background: 'bg-gradient-info',
+            shape: 'rounded-circle',
+          }"
+        />
+      </div>
+      <div class="col-6 col-md-6 col-xl-3">
+        <mini-statistics-card
+          title="Pendientes"
+          :value="String(stats.pendientes)"
+          description="<span class='text-sm font-weight-bolder text-warning'>Por activar</span>"
+          :icon="{
+            component: 'ni ni-time-alarm',
             background: 'bg-gradient-warning',
             shape: 'rounded-circle',
           }"
@@ -142,58 +167,71 @@ const stats = computed(() => ({
       </div>
     </div>
 
-    <div class="row mt-4">
-      <div class="col-lg-5 col-12 mb-4 mb-lg-0">
-        <div class="card h-100">
-          <div class="p-3 pb-0 card-header">
-            <h6 class="mb-0 font-weight-bolder">Estructura binaria</h6>
-            <p class="text-xs text-secondary mt-1 mb-0">Referidos directos por pierna (si ya tienen colocación).</p>
+    <div class="row">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header border-0 pb-0 pt-3 px-3 px-md-4 bg-transparent">
+            <h6 class="mb-0 font-weight-bolder text-dark">Línea directa (vista horizontal)</h6>
+            <p class="text-xs text-secondary mb-0 mt-1">
+              Desplaza horizontalmente en móvil. Cada tarjeta es un referido de primer nivel.
+            </p>
           </div>
-          <div class="p-3 card-body overflow-auto">
-            <div class="referidos-tree">
-              <div class="tree-node-root">
-                <div class="avatar-root bg-gradient-primary rounded-circle shadow d-flex align-items-center justify-content-center text-white font-weight-bolder">
+          <div class="card-body pt-2 pb-4 px-3 px-md-4">
+            <div v-if="loading" class="text-muted text-sm py-3">Cargando red…</div>
+            <div v-else-if="!referidosOrdenados.length" class="text-muted text-sm py-3">
+              Aún no tienes referidos directos. Comparte tu enlace de patrocinio.
+            </div>
+            <div v-else class="unilevel-rail">
+              <div class="unilevel-rail__root">
+                <div
+                  class="unilevel-avatar unilevel-avatar--root bg-gradient-dark text-white shadow d-flex align-items-center justify-content-center font-weight-bolder"
+                >
                   Tú
                 </div>
+                <span class="unilevel-rail__caption text-xxs text-secondary text-uppercase font-weight-bolder"
+                  >Patrocinador</span
+                >
               </div>
-              <div class="tree-connector-main"></div>
-              <div class="tree-branches">
-                <div class="tree-branch left">
-                  <div class="tree-connector-v"></div>
-                  <div class="tree-label text-primary text-xs font-weight-bolder mb-1">Izquierda</div>
-                  <div class="tree-nodes">
-                    <div
-                      v-for="ref in referidosIzquierda"
-                      :key="ref.id"
-                      class="tree-node-ref"
-                      :class="ref.estado === 'Activo' ? 'node-active' : 'node-inactive'"
-                    >
-                      <div class="avatar-ref rounded-circle d-flex align-items-center justify-content-center text-white text-xs font-weight-bolder bg-gradient-primary">
+              <div class="unilevel-rail__connector" aria-hidden="true" />
+              <div class="unilevel-rail__scroll">
+                <div
+                  v-for="ref in referidosOrdenados"
+                  :key="ref.id"
+                  class="card border-0 shadow-sm unilevel-card h-100"
+                  :class="{ 'unilevel-card--inactive': ref.estadoRaw !== 'active' }"
+                >
+                  <div class="card-body p-3 d-flex flex-column">
+                    <div class="d-flex align-items-start gap-2 mb-2">
+                      <div
+                        class="unilevel-avatar unilevel-avatar--member rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center text-white font-weight-bolder text-xs"
+                        :class="
+                          ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'
+                        "
+                      >
                         {{ ref.iniciales }}
                       </div>
-                      <span class="ref-name text-xs font-weight-bold">{{ ref.nombre.split(" ")[0] }}</span>
-                      <span class="ref-vol text-xxs text-secondary">{{ ref.volumen }}</span>
-                    </div>
-                    <div v-if="referidosIzquierda.length === 0" class="text-xxs text-muted text-center">Nadie aún</div>
-                  </div>
-                </div>
-                <div class="tree-branch right">
-                  <div class="tree-connector-v"></div>
-                  <div class="tree-label text-success text-xs font-weight-bolder mb-1">Derecha</div>
-                  <div class="tree-nodes">
-                    <div
-                      v-for="ref in referidosDerecha"
-                      :key="ref.id"
-                      class="tree-node-ref"
-                      :class="ref.estado === 'Activo' ? 'node-active' : 'node-inactive'"
-                    >
-                      <div class="avatar-ref rounded-circle d-flex align-items-center justify-content-center text-white text-xs font-weight-bolder bg-gradient-success">
-                        {{ ref.iniciales }}
+                      <div class="min-w-0 flex-grow-1">
+                        <h6 class="text-sm font-weight-bolder text-dark mb-0 text-truncate">{{ ref.nombre }}</h6>
+                        <p class="text-xxs text-secondary mb-0 font-mono">{{ ref.memberCode }}</p>
                       </div>
-                      <span class="ref-name text-xs font-weight-bold">{{ ref.nombre.split(" ")[0] }}</span>
-                      <span class="ref-vol text-xxs text-secondary">{{ ref.volumen }}</span>
                     </div>
-                    <div v-if="referidosDerecha.length === 0" class="text-xxs text-muted text-center">Nadie aún</div>
+                    <div class="d-flex flex-wrap gap-1 mb-2">
+                      <span class="badge badge-sm bg-gradient-warning">{{ ref.rango }}</span>
+                      <span class="badge badge-sm" :class="badgeClaseEstado(ref)">{{ ref.estado }}</span>
+                      <span
+                        v-if="ref.pierna"
+                        class="badge badge-sm"
+                        :class="ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-success'"
+                      >
+                        {{ piernaEtiqueta(ref.pierna) }}
+                      </span>
+                      <span v-else class="badge badge-sm bg-gradient-secondary">Sin pierna</span>
+                    </div>
+                    <div class="mt-auto pt-2 border-top border-light">
+                      <p class="text-xxs text-secondary mb-0">PV calificación (mes)</p>
+                      <p class="text-sm font-weight-bolder text-dark mb-0">{{ ref.volumen }}</p>
+                      <p class="text-xxs text-secondary mb-0 mt-1">Ingreso: {{ ref.fechaAlta }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -201,38 +239,44 @@ const stats = computed(() => ({
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="col-lg-7 col-12">
-        <div class="card">
-          <div class="p-3 pb-0 card-header">
-            <h6 class="mb-0 font-weight-bolder">Información de referidos directos</h6>
-            <p class="text-xs text-secondary mt-1 mb-0">Detalle desde el registro MLM.</p>
+    <div class="row">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header border-0 pb-0 pt-3 px-3 px-md-4 bg-transparent">
+            <h6 class="mb-0 font-weight-bolder text-dark">Listado completo</h6>
+            <p class="text-xs text-secondary mb-0 mt-1">Misma información en formato tabla (desktop).</p>
           </div>
           <div class="table-responsive">
-            <table class="table align-items-center mb-0">
+            <table class="table align-items-center mb-0 referidos-table">
               <thead>
                 <tr>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Referido</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Fecha alta</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-3">Socio</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Ingreso</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Pierna</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">PV mes</th>
                   <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Rango</th>
-                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center">Estado</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 text-center pe-3">
+                    Estado
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="ref in referidos" :key="ref.id">
-                  <td>
-                    <div class="d-flex px-2 py-1 align-items-center">
+                <tr v-for="ref in referidosOrdenados" :key="ref.id">
+                  <td class="ps-3">
+                    <div class="d-flex align-items-center py-1">
                       <div
-                        class="avatar avatar-sm rounded-circle me-3 d-flex align-items-center justify-content-center text-white font-weight-bolder text-xs"
-                        :class="ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'"
+                        class="avatar avatar-sm rounded-circle me-2 d-flex align-items-center justify-content-center text-white font-weight-bolder text-xs flex-shrink-0"
+                        :class="
+                          ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'
+                        "
                       >
                         {{ ref.iniciales }}
                       </div>
-                      <div class="d-flex flex-column justify-content-center">
-                        <h6 class="mb-0 text-sm">{{ ref.nombre }}</h6>
-                        <p class="text-xs text-secondary mb-0">{{ ref.email }}</p>
+                      <div class="min-w-0">
+                        <h6 class="mb-0 text-sm text-truncate">{{ ref.nombre }}</h6>
+                        <p class="text-xxs text-secondary mb-0 text-truncate">{{ ref.email }}</p>
                       </div>
                     </div>
                   </td>
@@ -240,7 +284,7 @@ const stats = computed(() => ({
                     <span class="text-xs font-weight-bold text-secondary">{{ ref.fechaAlta }}</span>
                   </td>
                   <td class="align-middle text-center">
-                    <span v-if="!ref.pierna" class="badge badge-sm bg-gradient-secondary">Sin asignar</span>
+                    <span v-if="!ref.pierna" class="badge badge-sm bg-gradient-secondary">—</span>
                     <span
                       v-else
                       class="badge badge-sm"
@@ -255,13 +299,8 @@ const stats = computed(() => ({
                   <td class="align-middle text-center">
                     <span class="badge badge-sm bg-gradient-warning">{{ ref.rango }}</span>
                   </td>
-                  <td class="align-middle text-center">
-                    <span
-                      class="badge badge-sm"
-                      :class="ref.estado === 'Activo' ? 'bg-gradient-success' : 'bg-gradient-secondary'"
-                    >
-                      {{ ref.estado }}
-                    </span>
+                  <td class="align-middle text-center pe-3">
+                    <span class="badge badge-sm" :class="badgeClaseEstado(ref)">{{ ref.estado }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -270,150 +309,101 @@ const stats = computed(() => ({
         </div>
       </div>
     </div>
-
-    <div class="row mt-4">
-      <div class="col-12">
-        <h6 class="mb-3 font-weight-bolder text-dark">Detalle por referido</h6>
-      </div>
-      <div
-        v-for="ref in referidos"
-        :key="'card-' + ref.id"
-        class="col-lg-4 col-md-6 col-12 mb-4"
-      >
-        <div class="card border-0 shadow-sm h-100">
-          <div class="p-3 card-body">
-            <div class="d-flex align-items-center mb-3">
-              <div
-                class="avatar avatar-lg rounded-circle me-3 d-flex align-items-center justify-content-center text-white font-weight-bolder"
-                :class="ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'"
-              >
-                {{ ref.iniciales }}
-              </div>
-              <div>
-                <h6 class="mb-0 text-sm font-weight-bolder">{{ ref.nombre }}</h6>
-                <p class="text-xs text-secondary mb-0">{{ ref.email }}</p>
-              </div>
-            </div>
-            <hr class="horizontal dark" />
-            <div class="row text-center">
-              <div class="col-4">
-                <p class="text-xxs text-secondary mb-0">Pierna</p>
-                <span
-                  class="badge badge-sm mt-1"
-                  :class="ref.pierna === 'right' ? 'bg-gradient-success' : ref.pierna === 'left' ? 'bg-gradient-primary' : 'bg-gradient-secondary'"
-                >
-                  {{
-                    ref.pierna === "left" ? "Izquierda" : ref.pierna === "right" ? "Derecha" : "Sin asignar"
-                  }}
-                </span>
-              </div>
-              <div class="col-4">
-                <p class="text-xxs text-secondary mb-0">PV mes</p>
-                <p class="text-sm font-weight-bolder mb-0">{{ ref.volumen }}</p>
-              </div>
-              <div class="col-4">
-                <p class="text-xxs text-secondary mb-0">Estado</p>
-                <span
-                  class="badge badge-sm mt-1"
-                  :class="ref.estado === 'Activo' ? 'bg-gradient-success' : 'bg-gradient-secondary'"
-                >
-                  {{ ref.estado }}
-                </span>
-              </div>
-            </div>
-            <div class="mt-2 pt-2 d-flex justify-content-between align-items-center">
-              <span class="text-xs text-secondary">Alta: {{ ref.fechaAlta }}</span>
-              <span class="badge badge-sm bg-gradient-warning">{{ ref.rango }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <style scoped>
-.referidos-tree {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.5rem 0;
-  min-height: 280px;
-}
-.tree-node-root {
-  margin-bottom: 0;
-}
-.avatar-root {
-  width: 56px;
-  height: 56px;
-  font-size: 0.85rem;
-}
-.tree-connector-main {
-  width: 2px;
-  height: 20px;
-  background: linear-gradient(180deg, #54b144 0%, #e9ecef 100%);
-  margin: 0.25rem auto;
-}
-.tree-branches {
-  display: flex;
-  gap: 2rem;
-  margin-top: 0.5rem;
-  width: 100%;
-  justify-content: center;
-}
-.tree-branch {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  max-width: 220px;
-}
-.tree-connector-v {
-  width: 2px;
-  height: 12px;
-  background: #dee2e6;
-  margin-bottom: 0.25rem;
-}
-.tree-nodes {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: 100%;
-}
-.tree-node-ref {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
-  transition: box-shadow 0.2s ease;
-}
-.tree-node-ref.node-active {
-  border-color: rgba(45, 206, 137, 0.3);
-  background: rgba(84, 177, 68, 0.06);
-}
-.tree-node-ref.node-inactive {
-  opacity: 0.85;
-}
-.tree-node-ref:hover {
-  box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.08);
-}
-.avatar-ref {
-  width: 36px;
-  height: 36px;
-  font-size: 0.65rem;
-  margin-bottom: 0.25rem;
-}
-.ref-name {
-  display: block;
-  color: #344767;
-}
-.ref-vol {
-  display: block;
+.referidos-page__intro {
+  border-radius: 0.75rem;
 }
 .text-xxs {
   font-size: 0.65rem;
+}
+.unilevel-rail {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+}
+.unilevel-rail__root {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding-top: 0.25rem;
+}
+.unilevel-rail__connector {
+  width: 12px;
+  flex-shrink: 0;
+  align-self: center;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #8898aa 0%, #54b144 100%);
+  opacity: 0.85;
+}
+.unilevel-rail__scroll {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 0.35rem;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-width: 0;
+}
+.unilevel-card {
+  flex: 0 0 auto;
+  width: 220px;
+  max-width: 85vw;
+  border-radius: 0.65rem;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.unilevel-card:hover {
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-2px);
+}
+.unilevel-card--inactive {
+  opacity: 0.92;
+}
+.unilevel-avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 0.7rem;
+  border-radius: 0.65rem;
+}
+.unilevel-avatar--root {
+  width: 52px;
+  height: 52px;
+  font-size: 0.75rem;
+  border-radius: 50%;
+}
+.unilevel-avatar--member {
+  width: 40px;
+  height: 40px;
+  font-size: 0.65rem;
+}
+.referidos-table th,
+.referidos-table td {
+  vertical-align: middle;
+}
+@media (max-width: 575.98px) {
+  .unilevel-rail {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .unilevel-rail__connector {
+    width: 3px;
+    height: 16px;
+    align-self: flex-start;
+    margin-left: 24px;
+    background: linear-gradient(180deg, #8898aa 0%, #54b144 100%);
+  }
+  .unilevel-rail__scroll {
+    width: 100%;
+    padding-left: 0;
+  }
 }
 </style>
