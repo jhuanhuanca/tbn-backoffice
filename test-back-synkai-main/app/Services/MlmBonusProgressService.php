@@ -224,6 +224,22 @@ class MlmBonusProgressService
             'pv_target' => $pvTarget,
         ];
 
+        // Regla UX: cuando el usuario ya completó la meta de 1200 PV (en ventana 90 días),
+        // ocultar completamente el banner y el medidor.
+        if (bccomp($pv90, $pvTarget, 2) >= 0) {
+            return [
+                'banner' => [
+                    'show' => false,
+                    'title' => null,
+                    'message' => null,
+                    'pv_target' => $pvTarget,
+                    'months' => $months,
+                    'pv_90d' => $pv90,
+                ],
+                'window_bar' => array_merge($windowBar, ['show' => false]),
+            ];
+        }
+
         if ($user->canAccessAdminPanel()) {
             return [
                 'banner' => [
@@ -234,7 +250,7 @@ class MlmBonusProgressService
                     'months' => $months,
                     'pv_90d' => $pv90,
                 ],
-                'window_bar' => $windowBar,
+                'window_bar' => array_merge($windowBar, ['show' => false]),
             ];
         }
 
@@ -260,7 +276,7 @@ class MlmBonusProgressService
                     'months' => $months,
                     'pv_90d' => $pv90,
                 ],
-                'window_bar' => $windowBar,
+                'window_bar' => array_merge($windowBar, ['show' => false]),
             ];
         }
 

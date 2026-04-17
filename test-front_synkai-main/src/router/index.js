@@ -16,11 +16,14 @@ import ComprasRealizadas from "../views/ComprasRealizadas.vue";
 import Billetera from "../views/Billetera.vue";
 import Cuenta from "../views/Cuenta.vue";
 import LandingPersonal from "../views/LandingPersonal.vue";
+import LandingEditor from "../views/LandingEditor.vue";
 import SuscripcionPago from "../views/SuscripcionPago.vue";
 import VerificarCorreo from "../views/VerificarCorreo.vue";
 import ActivacionBinaria from "../views/ActivacionBinaria.vue";
 import Comisiones from "../views/Comisiones.vue";
 import LinkReferidos from "../views/linkReferidos.vue";
+import EstadisticasEquipo from "../views/EstadisticasEquipo.vue";
+import RetirosHistorial from "../views/RetirosHistorial.vue";
 import AdminDashboard from "../views/admin/AdminDashboard.vue";
 import AdminRetiros from "../views/admin/AdminRetiros.vue";
 import AdminReconciliacion from "../views/admin/AdminReconciliacion.vue";
@@ -96,9 +99,12 @@ const routes = [
   { path: "/verificar-correo", name: "VerificarCorreo", component: VerificarCorreo, meta: { guest: true } },
   { path: "/activacion-binaria", name: "ActivacionBinaria", component: ActivacionBinaria, meta: requiresAuth },
   { path: "/cuenta", name: "Cuenta", component: Cuenta, meta: requiresAuth },
-  { path: "/mi-landing", name: "LandingPersonal", component: LandingPersonal, meta: requiresAuth },
+  { path: "/mi-landing", name: "LandingEditor", component: LandingEditor, meta: requiresAuth },
+  { path: "/p/:memberCode", name: "LandingPublic", component: LandingPersonal, meta: { guest: true } },
   { path: "/comisiones", name: "Comisiones", component: Comisiones, meta: requiresAuth },
   { path: "/linkreferidos", name: "LinkReferidos", component: LinkReferidos, meta: requiresAuth },
+  { path: "/estadisticas-equipo", name: "EstadisticasEquipo", component: EstadisticasEquipo, meta: requiresAuth },
+  { path: "/retiros-historial", name: "RetirosHistorial", component: RetirosHistorial, meta: requiresAuth },
   { path: "/admin/dashboard", name: "AdminDashboard", component: AdminDashboard, meta: requiresAdmin },
   { path: "/admin/retiros", name: "AdminRetiros", component: AdminRetiros, meta: requiresAdmin },
   { path: "/admin/reconciliacion", name: "AdminReconciliacion", component: AdminReconciliacion, meta: requiresAdmin },

@@ -48,7 +48,8 @@ class AuthRegisterPreferenteController extends Controller
             'sponsor_id' => $sponsor->id,
             'account_type' => 'preferred_customer',
             'rank_id' => Rank::query()->where('slug', 'sin_rango')->value('id'),
-            'account_status' => 'active',
+            // Mantener pendiente mientras verifica correo (login ya lo bloquea si no verifica).
+            'account_status' => 'pending',
             'mlm_role' => 'member',
         ]);
 

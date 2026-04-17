@@ -50,5 +50,8 @@ return Application::configure(basePath: dirname(__DIR__))
         })->monthlyOn(2, '05:00');
 
         $schedule->command('mlm:purge-inactive-members')->monthlyOn(7, '06:00');
+
+        // Limpieza automática: registros sin verificación o sin pago de activación.
+        $schedule->command('mlm:prune-stale-registrations')->hourly();
     })
     ->create();

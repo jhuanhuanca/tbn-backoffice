@@ -17,10 +17,10 @@ import logoSpotify from "@/assets/img/small-logos/logo-spotify.svg";
 import logoJira from "@/assets/img/small-logos/logo-jira.svg";
 import logoInvision from "@/assets/img/small-logos/logo-invision.svg";
 
-import team1 from "@/assets/img/team-1.jpg";
-import team2 from "@/assets/img/team-2.jpg";
-import team3 from "@/assets/img/team-3.jpg";
-import team4 from "@/assets/img/team-4.jpg";
+import team1 from "@/assets/img/synkailogo2.png";
+import team2 from "@/assets/img/synkailogo2.png";
+import team3 from "@/assets/img/synkailogo2.png";
+import team4 from "@/assets/img/synkailogo2.png";
 
 const store = useStore();
 

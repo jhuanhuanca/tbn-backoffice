@@ -26,6 +26,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'phone',
         'birth_date',
         'sponsor_id',
+        'preferred_binary_leg',
         'mlm_role',
         'account_status',
         'is_mlm_qualified',
@@ -39,6 +40,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'activation_paid_at',
         'account_type',
         'last_mlm_activity_at',
+        'meta',
     ];
 
     protected $hidden = [
@@ -63,6 +65,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'monthly_qualifying_pv' => 'decimal:2',
             'activation_paid_at' => 'datetime',
             'last_mlm_activity_at' => 'datetime',
+            'meta' => 'array',
         ];
     }
 

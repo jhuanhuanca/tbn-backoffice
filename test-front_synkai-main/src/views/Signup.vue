@@ -10,9 +10,6 @@ import api from "@/services/api";
 import { fetchSponsorByCode } from "@/services/sponsor";
 import { fetchPackages } from "@/services/me";
 import { LATAM_COUNTRIES } from "@/constants/latamCountries";
-import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
-import MlmPaymentMethodPanel from "@/components/MlmPaymentMethodPanel.vue";
-
 const body = document.getElementsByTagName("body")[0];
 const store = useStore();
 const router = useRouter();
@@ -27,6 +24,7 @@ const ciNit = ref("");
 const phone = ref("");
 const birthDate = ref("");
 const sponsorReferralCode = ref("");
+const preferredBinaryLeg = ref("auto");
 const sponsorValidated = ref(null);
 const sponsorCheckLoading = ref(false);
 const sponsorError = ref("");
@@ -36,8 +34,6 @@ const loading = ref(false);
 const packagesList = ref([]);
 const selectedPackageId = ref("");
 const countryCode = ref("BO");
-const paymentMethod = ref("transferencia");
-const paymentOptions = REGISTRATION_PAYMENT_METHODS;
 
 function applyPackageFromQuery() {
   const pkg = route.query.package;
@@ -197,10 +193,12 @@ async function signup() {
       payload.sponsor_referral_code = sponsorReferralCode.value.trim();
     }
     payload.country_code = countryCode.value;
+    if (preferredBinaryLeg.value) {
+      payload.preferred_binary_leg = preferredBinaryLeg.value;
+    }
     if (selectedPackageId.value) {
       payload.registration_package_id = parseInt(String(selectedPackageId.value), 10);
     }
-    payload.preferred_payment_method = paymentMethod.value;
     const response = await api.post("/register", payload);
     if (response.data.requires_email_verification) {
       router.push({
@@ -292,23 +290,6 @@ async function signup() {
             </div>
             <div class="card-body px-4 pb-2">
               <h6 class="text-sm text-dark font-weight-bolder mb-3">Paquete y país</h6>
-              <div class="mb-3">
-                <label class="form-label text-sm mb-1">Paquete (opcional; puedes activarlo después)</label>
-                <select v-model="selectedPackageId" class="form-select">
-                  <option value="">— Elegir después —</option>
-                  <option v-for="p in packagesList" :key="p.id" :value="String(p.id)">
-                    {{ p.name }} — {{ p.pv_points }} PV — Bs. {{ p.price }}
-                  </option>
-                </select>
-              </div>
-              <div class="mb-3">
-                <label class="form-label text-sm mb-1">Forma de pago preferida</label>
-                <select v-model="paymentMethod" class="form-select">
-                  <option v-for="opt in paymentOptions" :key="opt.value" :value="opt.value">
-                    {{ opt.label }}
-                  </option>
-                </select>
-              </div>
               <div class="mb-4">
                 <label class="form-label text-sm mb-1">País</label>
                 <select v-model="countryCode" class="form-select">
@@ -317,8 +298,6 @@ async function signup() {
                   </option>
                 </select>
               </div>
-
-              <MlmPaymentMethodPanel v-model="paymentMethod" :show-method-select="false" title="Detalle del método de pago" />
 
               <div
                 v-if="sponsorReferralCode"
@@ -376,17 +355,38 @@ async function signup() {
                   <argon-input v-model="birthDate" id="bd" type="date" placeholder="" />
                 </div>
                 <div class="mb-3">
+                  <label class="form-label text-sm mb-1">Colocación binaria preferida (directo bajo tu patrocinador)</label>
+                  <select v-model="preferredBinaryLeg" class="form-select">
+                    <option value="left">Pierna izquierda</option>
+                    <option value="right">Pierna derecha</option>
+                    <option value="auto">Automático</option>
+                  </select>
+                  <p class="text-xxs text-muted mb-0 mt-1">
+                    Se aplicará al activar la cuenta. Si eliges izquierda/derecha y el cupo está ocupado, podrás escoger otra.
+                  </p>
+                </div>
+                <div class="mb-3">
                   <label class="form-label text-sm mb-1">Contraseña (mín. 8) <span class="text-danger">*</span></label>
-                  <argon-input v-model="password" id="password" type="password" placeholder="Contraseña" />
+                  <div class="input-group">
+                  <argon-input 
+                    v-model="password" 
+                    id="password" 
+                    :type="showPassword ? 'text' : 'password'" 
+                    placeholder="Contraseña" 
+                  />
+                  </div>
                 </div>
                 <div class="mb-3">
                   <label class="form-label text-sm mb-1">Confirmar contraseña <span class="text-danger">*</span></label>
+                  <div class="input-group">
                   <argon-input
                     v-model="passwordConfirmation"
                     id="password2"
-                    type="password"
+                    :type="showPasswordConfirm ? 'text' : 'password'"
                     placeholder="Repite la contraseña"
                   />
+                 
+                  </div>
                 </div>
 
                 <div class="form-check mb-2">

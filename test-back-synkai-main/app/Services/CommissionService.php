@@ -109,10 +109,22 @@ class CommissionService
             return;
         }
 
+        // Regla negocio: NO hay residual por la inscripción/paquete inicial.
+        // El residual empieza desde la 2.ª compra completada del socio (incluyendo esa 2.ª compra).
+        $completedOrdersCount = Order::query()
+            ->where('user_id', $buyer->id)
+            ->where('estado', 'completado')
+            ->count();
+        if ($completedOrdersCount < 2) {
+            return;
+        }
+
         $pv = $this->roundMoney($order->commissionablePvTotal());
         if (bccomp($pv, '0', 2) !== 1) {
             return;
         }
+
+        $bobPerPv = (string) config('mlm.pv_value.bob_per_pv', '7');
 
         $chain = $this->cadenaPatrocinadoresConRango((int) $buyer->id, 12);
         $gen = 1;
@@ -123,7 +135,8 @@ class CommissionService
             $rate = (string) ($rates[$gen] ?? '0');
 
             if (bccomp($rate, '0', 6) === 1) {
-                $amount = $this->roundMoney(bcmul($pv, $rate, 4));
+                $pvComision = bcmul($pv, $rate, 4);
+                $amount = $this->roundMoney(bcmul($pvComision, $bobPerPv, 4));
                 if (bccomp($amount, '0', 2) === 1) {
                     $key = "residual:order:{$order->id}:gen:{$gen}:u:{$sponsor->id}";
                     $this->registrarYAcreditar(
@@ -140,6 +153,9 @@ class CommissionService
                             'commissionable_pv' => $pv,
                             'effective_rank_slug' => $slug,
                             'rate' => $rate,
+                            'pv_comision' => $pvComision,
+                            'bob_per_pv' => $bobPerPv,
+                            'buyer_completed_orders_count' => $completedOrdersCount,
                         ]
                     );
                 }

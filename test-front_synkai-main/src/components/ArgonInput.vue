@@ -46,6 +46,18 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  autocomplete: {
+    type: String,
+    default: undefined,
+  },
+  autocapitalize: {
+    type: String,
+    default: undefined,
+  },
+  spellcheck: {
+    type: [Boolean, String],
+    default: undefined,
+  },
 });
 
 const getClasses = (size, success, error) => {
@@ -81,6 +93,9 @@ const hasIcon = (icon) => (icon ? "input-group" : null);
         :value="modelValue"
         :placeholder="placeholder"
         :isRequired="isRequired"
+        :autocomplete="autocomplete"
+        :autocapitalize="autocapitalize"
+        :spellcheck="spellcheck"
         @input="emit('update:modelValue', $event.target.value)"
       />
       <span v-if="iconDir === 'right'" class="input-group-text">

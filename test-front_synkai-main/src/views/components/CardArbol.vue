@@ -2,18 +2,20 @@
 import { ref, computed, onMounted } from "vue";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 import DefaultInfoCard from "@/examples/Cards/DefaultInfoCard.vue";
-import BinaryTreeBranch from "./BinaryTreeBranch.vue";
-import { fetchBinaryTree } from "@/services/me";
+import { fetchBinaryTree, fetchReferrals } from "@/services/me";
 
 const loading = ref(true);
 const error = ref("");
 const payload = ref(null);
+const directs = ref([]);
 
 onMounted(async () => {
   loading.value = true;
   error.value = "";
   try {
-    payload.value = await fetchBinaryTree();
+    const [bin, refs] = await Promise.all([fetchBinaryTree(), fetchReferrals()]);
+    payload.value = bin;
+    directs.value = refs.items || [];
   } catch {
     error.value = "No se pudo cargar el árbol binario. Inicia sesión e inténtalo de nuevo.";
   } finally {
@@ -24,6 +26,72 @@ onMounted(async () => {
 const tree = computed(() => payload.value?.tree);
 const stats = computed(() => payload.value?.stats || {});
 const birPct = computed(() => payload.value?.bir_percentages || { 1: 0.21, 2: 0.15, 3: 0.06 });
+
+function initials(nombre) {
+  const parts = String(nombre || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const a = parts[0]?.[0] || "U";
+  const b = parts[1]?.[0] || "";
+  return `${a}${b}`.toUpperCase();
+}
+
+const directNodes = computed(() =>
+  directs.value.map((r) => ({
+    id: r.id,
+    nombre: r.name,
+    memberCode: r.member_code || "—",
+    fechaAlta: r.fecha_alta || "—",
+    joinedAtMs: r.joined_at ? Date.parse(r.joined_at) : 0,
+    pv: Number(r.monthly_qualifying_pv || 0),
+    rank: r.rank_name || "—",
+    status: r.account_status || "—",
+    prefer: r.preferred_binary_leg || "auto",
+    placedLeg: r.pierna || null,
+    iniciales: initials(r.name),
+  }))
+);
+
+const directByPref = computed(() => {
+  const left = [];
+  const right = [];
+  let sinAsignarCount = 0;
+  for (const d of directNodes.value) {
+    // Lado final: si eligió izquierda/derecha, usar eso. Si fue auto, usar la pierna asignada en binario.
+    const finalLeg =
+      d.prefer === "left" || d.prefer === "right"
+        ? d.prefer
+        : d.placedLeg === "left" || d.placedLeg === "right"
+          ? d.placedLeg
+          : null;
+
+    if (finalLeg === "left") left.push(d);
+    else if (finalLeg === "right") right.push(d);
+    else sinAsignarCount += 1;
+  }
+  // FIFO real: primero entra primero se muestra (joined_at), fallback por id
+  const sorter = (a, b) => {
+    if (a.joinedAtMs !== b.joinedAtMs) return a.joinedAtMs - b.joinedAtMs;
+    return (Number(a.id) || 0) - (Number(b.id) || 0);
+  };
+  left.sort(sorter);
+  right.sort(sorter);
+  return { left, right, sinAsignarCount };
+});
+
+function statusLabel(s) {
+  if (s === "active") return "Activo";
+  if (s === "pending") return "Pendiente";
+  if (s === "inactive") return "Inactivo";
+  return s ? String(s) : "—";
+}
+
+function placedLabel(leg) {
+  if (leg === "left") return "Colocado: Izq";
+  if (leg === "right") return "Colocado: Der";
+  return "Sin colocación";
+}
 
 const birRows = computed(() => {
   const p = birPct.value;
@@ -178,7 +246,7 @@ function formatBs(v) {
           <div class="p-3 pb-0 card-header">
             <h6 class="mb-0 font-weight-bolder">Estructura del árbol binario</h6>
             <p class="text-xs text-secondary mt-1 mb-0">
-              Colocación según <code>binary_placements</code> (tu posición y dos niveles).
+              Pirámide por preferencia de colocación (solo socios directos) y PV por socio.
             </p>
           </div>
           <div class="p-3 card-body overflow-auto">
@@ -189,17 +257,54 @@ function formatBs(v) {
                 <div class="text-xxs text-muted">{{ tree.user?.member_code }}</div>
               </div>
               <div class="tree-connector"></div>
-              <div class="tree-children d-flex justify-content-around gap-3 flex-wrap">
-                <div class="text-center flex-fill">
-                  <div class="text-xs text-primary font-weight-bolder mb-2">Izquierda</div>
-                  <BinaryTreeBranch v-if="tree.left" :branch="tree.left" />
-                  <span v-else class="text-xs text-muted">Sin colocación</span>
+              <div v-if="directByPref.sinAsignarCount" class="alert alert-light border text-xs mb-3 py-2">
+                <strong>{{ directByPref.sinAsignarCount }}</strong> socio(s) aún <strong>sin pierna asignada</strong> (no aparecen en Izq/Der).
+              </div>
+              <div class="pyramid">
+                <div class="pyramid__col">
+                  <div class="pyramid__title text-primary">Izquierda</div>
+                  <div v-if="directByPref.left.length" class="pyramid__stack">
+                    <div
+                      v-for="(d, idx) in directByPref.left"
+                      :key="'pl-' + d.id"
+                      class="pyramid__node"
+                      :style="{ width: Math.max(62, 100 - idx * 6) + '%' }"
+                    >
+                      <div class="pyramid__badge bg-gradient-primary text-white shadow">{{ d.iniciales }}</div>
+                      <div class="min-w-0">
+                        <div class="text-sm font-weight-bolder text-dark text-truncate">{{ d.nombre }}</div>
+                        <div class="text-xxs text-secondary">
+                          {{ formatPv(d.pv) }} · {{ d.rank }} · {{ placedLabel(d.placedLeg) }}
+                        </div>
+                      </div>
+                      <span class="badge badge-sm ms-auto bg-gradient-secondary">{{ statusLabel(d.status) }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-muted">Sin socios</div>
                 </div>
-                <div class="text-center flex-fill">
-                  <div class="text-xs text-success font-weight-bolder mb-2">Derecha</div>
-                  <BinaryTreeBranch v-if="tree.right" :branch="tree.right" />
-                  <span v-else class="text-xs text-muted">Sin colocación</span>
+
+                <div class="pyramid__col">
+                  <div class="pyramid__title text-success">Derecha</div>
+                  <div v-if="directByPref.right.length" class="pyramid__stack">
+                    <div
+                      v-for="(d, idx) in directByPref.right"
+                      :key="'pr-' + d.id"
+                      class="pyramid__node"
+                      :style="{ width: Math.max(62, 100 - idx * 6) + '%' }"
+                    >
+                      <div class="pyramid__badge bg-gradient-success text-white shadow">{{ d.iniciales }}</div>
+                      <div class="min-w-0">
+                        <div class="text-sm font-weight-bolder text-dark text-truncate">{{ d.nombre }}</div>
+                        <div class="text-xxs text-secondary">
+                          {{ formatPv(d.pv) }} · {{ d.rank }} · {{ placedLabel(d.placedLeg) }}
+                        </div>
+                      </div>
+                      <span class="badge badge-sm ms-auto bg-gradient-secondary">{{ statusLabel(d.status) }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-muted">Sin socios</div>
                 </div>
+
               </div>
             </div>
             <p v-else class="text-sm text-muted mb-0">Sin datos de árbol.</p>
@@ -343,5 +448,67 @@ function formatBs(v) {
 }
 .text-xxs {
   font-size: 0.65rem;
+}
+
+.pyramid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  align-items: start;
+}
+.pyramid__col {
+  min-width: 0;
+}
+.pyramid__title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+.pyramid__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+.pyramid__node {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.06);
+  transition: transform 0.12s ease, box-shadow 0.18s ease;
+  max-width: 100%;
+}
+.pyramid__node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0.45rem 1.25rem rgba(0, 0, 0, 0.08);
+}
+.pyramid__badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.65rem;
+  flex: 0 0 auto;
+}
+@media (max-width: 991.98px) {
+  .pyramid {
+    grid-template-columns: 1fr;
+  }
+  .pyramid__stack {
+    align-items: stretch;
+  }
+  .pyramid__node {
+    width: 100% !important;
+  }
 }
 </style>

@@ -14,6 +14,9 @@ use App\Http\Controllers\Api\AuthRegisterPreferenteController;
 use App\Http\Controllers\Api\BinaryPlacementController;
 use App\Http\Controllers\Api\BinaryPlacementSelfController;
 use App\Http\Controllers\Api\MeController;
+use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\PublicLandingController;
+use App\Http\Controllers\Api\SupportTicketController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PackageCatalogController;
 use App\Http\Controllers\Api\ProductCatalogController;
@@ -53,8 +56,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [MeController::class, 'profile']);
     Route::get('/me/dashboard', [MeController::class, 'dashboard']);
     Route::get('/me/referrals', [MeController::class, 'referrals']);
+    Route::get('/me/unilevel-tree', [MeController::class, 'unilevelTree']);
     Route::get('/me/commissions', [MeController::class, 'commissions']);
     Route::get('/me/binary-tree', [MeController::class, 'binaryTree']);
+    Route::put('/me/profile', [AccountController::class, 'updateProfile']);
+    Route::put('/me/password', [AccountController::class, 'changePassword']);
+    Route::get('/me/landing', [AccountController::class, 'getLanding']);
+    Route::put('/me/landing', [AccountController::class, 'updateLanding']);
+    Route::get('/me/wallet-settings', [AccountController::class, 'getWalletSettings']);
+    Route::put('/me/wallet-settings', [AccountController::class, 'updateWalletSettings']);
+    Route::get('/support/tickets', [SupportTicketController::class, 'index']);
+    Route::post('/support/tickets', [SupportTicketController::class, 'store']);
 
     Route::get('/wallet/balance', [WalletController::class, 'balance']);
     Route::get('/wallet/transactions', [WalletController::class, 'transactions']);
@@ -63,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders', [OrderController::class, 'store']);
     Route::post('/withdrawals', [WithdrawalController::class, 'store']);
+    Route::get('/withdrawals', [WithdrawalController::class, 'index']);
 
     Route::middleware('mlm.admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index']);
@@ -88,6 +101,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/packages/{package}', [AdminPackageController::class, 'destroy']);
     });
 });
+
+Route::get('/public/landing/{memberCode}', [PublicLandingController::class, 'show']);
 
 Route::post('/logout', function (Request $request) {
     $request->user()->currentAccessToken()->delete();

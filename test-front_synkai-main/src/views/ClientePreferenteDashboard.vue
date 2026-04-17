@@ -15,6 +15,31 @@ const checkoutLoading = ref(false);
 const checkoutMsg = ref("");
 const paymentMethod = ref("transferencia");
 
+// Imágenes fallback (mismo folder del socio)
+function loadFallbackImages() {
+  try {
+    // eslint-disable-next-line no-undef
+    const ctx = require.context("@/assets/img/productos", false, /\.(png|jpe?g|webp)$/i);
+    const list = ctx.keys().map((k) => ({ key: k, src: ctx(k) }));
+    const num = (k) => {
+      const m = String(k).match(/(\d+)\.(png|jpe?g|webp)$/i);
+      return m ? parseInt(m[1], 10) : Number.POSITIVE_INFINITY;
+    };
+    return list
+      .sort((a, b) => num(a.key) - num(b.key))
+      .map((x) => (typeof x.src === "string" ? x.src : x.src?.default || x.src));
+  } catch {
+    return [];
+  }
+}
+const FALLBACK_IMAGES = loadFallbackImages();
+
+function imageFor(p, index) {
+  if (p.image_url) return p.image_url;
+  if (!FALLBACK_IMAGES.length) return "";
+  return FALLBACK_IMAGES[index % FALLBACK_IMAGES.length];
+}
+
 const paymentSettlement = computed(() =>
   ["tarjeta", "online"].includes(paymentMethod.value) ? "immediate" : "manual"
 );
@@ -57,7 +82,11 @@ async function load() {
       fetchOrders({ per_page: 10 }),
       fetchProfile(),
     ]);
-    productos.value = cat.data || [];
+    const rows = (cat.data || []).slice().sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
+    productos.value = rows.map((p, i) => ({
+      ...p,
+      image_ui: imageFor(p, i),
+    }));
     orders.value = ord.data || [];
     await store.dispatch("auth/setAuth", {
       user: prof,
@@ -130,6 +159,9 @@ function formatBs(n) {
             <div v-else class="row g-3">
               <div v-for="p in productos" :key="p.id" class="col-md-6">
                 <div class="card h-100 border">
+                  <div v-if="p.image_ui" class="position-relative overflow-hidden rounded-top" style="height: 160px">
+                    <img :src="p.image_ui" :alt="p.name" class="w-100 h-100" style="object-fit: cover" loading="lazy" />
+                  </div>
                   <div class="card-body p-3">
                     <h6 class="mb-1">{{ p.name }}</h6>
                     <p class="text-xs text-muted mb-2 text-truncate-3" style="min-height: 2.5rem">

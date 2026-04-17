@@ -45,7 +45,8 @@ return [
      * Usado en BIR (21%/15%/6% sobre PV del paquete) y en binario (21% sobre PV emparejado).
      */
     'pv_value' => [
-        'bob_per_pv' => (string) env('MLM_BOB_PER_PV', '9'),
+        // Tipo de cambio oficial interno: 1 PV = 7 Bs.
+        'bob_per_pv' => (string) env('MLM_BOB_PER_PV', '7'),
     ],
 
     /**
@@ -71,7 +72,7 @@ return [
         'volume_period' => env('MLM_BINARY_VOLUME_PERIOD', 'monthly'),
         'legacy_flat' => filter_var(env('MLM_BINARY_LEGACY_FLAT', false), FILTER_VALIDATE_BOOL),
         'payout_per_matched_pv' => (string) env('MLM_BINARY_PAYOUT_PER_PV', '1'),
-        'bob_per_pv' => (string) env('MLM_BINARY_BOB_PER_PV', env('MLM_BOB_PER_PV', '9')),
+        'bob_per_pv' => (string) env('MLM_BINARY_BOB_PER_PV', env('MLM_BOB_PER_PV', '7')),
         'matched_pv_commission_rate' => (string) env('MLM_BINARY_MATCHED_RATE', '0.21'),
         'cache_ttl_seconds' => (int) env('MLM_BINARY_CACHE_TTL', 600),
         'cache_prefix' => 'mlm:binary:',

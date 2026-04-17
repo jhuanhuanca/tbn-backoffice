@@ -20,6 +20,8 @@ import Sidenav from "@/examples/Sidenav/index.vue";
 import Configurator from "@/examples/Configurator.vue";
 import Navbar from "@/examples/Navbars/Navbar.vue";
 import AppFooter from "@/examples/Footer.vue";
+import AppLoadingOverlay from "@/components/AppLoadingOverlay.vue";
+import { fetchProfile } from "@/services/me";
 
 const XL = 1200;
 const store = useStore();
@@ -38,6 +40,16 @@ router.afterEach(() => {
   if (typeof window !== "undefined" && window.innerWidth < XL) {
     store.commit("setPinned", false);
   }
+});
+
+// Pantalla de carga global (navegación lenta / recursos).
+router.beforeEach((to, from, next) => {
+  store.commit("setAppLoading", true);
+  next();
+});
+router.afterEach(() => {
+  // Pequeño delay para evitar flicker en navegaciones rápidas.
+  setTimeout(() => store.commit("setAppLoading", false), 250);
 });
 
 const isNavFixed = computed(() => store.state.isNavFixed);
@@ -87,10 +99,27 @@ onMounted(() => {
     import("@/assets/js/nav-pills.js").catch(() => {});
     import("@/assets/js/tooltip.js").catch(() => {});
   });
+
+  // Refresh liviano del perfil para que flags (activación/binario) se actualicen sin recargar.
+  const refresh = async () => {
+    if (!localStorage.getItem("token")) return;
+    try {
+      const u = await fetchProfile();
+      await store.dispatch("auth/setAuth", { user: u, token: localStorage.getItem("token") });
+    } catch {
+      /* ignore */
+    }
+  };
+  refresh();
+  window.__mlmProfileTimer = setInterval(refresh, 15000);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateViewport);
+  if (window.__mlmProfileTimer) {
+    clearInterval(window.__mlmProfileTimer);
+    window.__mlmProfileTimer = null;
+  }
 });
 </script>
 <template>
@@ -98,6 +127,7 @@ onBeforeUnmount(() => {
     class="g-sidenav-wrapper"
     :class="sidenavWrapperClass"
   >
+    <AppLoadingOverlay />
     <div
       v-show="layout === 'landing'"
       class="landing-bg h-100 bg-gradient-primary position-fixed w-100"

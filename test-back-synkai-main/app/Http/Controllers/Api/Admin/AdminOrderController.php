@@ -60,7 +60,10 @@ class AdminOrderController extends Controller
         if (! $buyer->canAccessAdminPanel()) {
             foreach ($order->items as $item) {
                 if ($item->package_id && $buyer->activation_paid_at === null) {
-                    $buyer->forceFill(['activation_paid_at' => now()])->save();
+                    $buyer->forceFill([
+                        'activation_paid_at' => now(),
+                        'account_status' => 'active',
+                    ])->save();
                     break;
                 }
             }

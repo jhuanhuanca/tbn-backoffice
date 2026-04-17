@@ -261,7 +261,7 @@ async function cerrarSesion() {
               </router-link>
             </li>
             <li class="nav-item">
-              <router-link to="" class="nav-link">
+              <router-link to="/estadisticas-equipo" class="nav-link">
                 <i class="ni ni-check-bold text-warning"></i>
                 <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Estadisticas del Equipo</span>
               </router-link>
@@ -292,7 +292,7 @@ async function cerrarSesion() {
               </router-link>
             </li>
             <li class="nav-item">
-              <router-link to="/submod2" class="nav-link">
+              <router-link to="/retiros-historial" class="nav-link">
                 <i class="ni ni-target text-warning"></i>
                 <span class="sidenav-normal ms-2 text-truncate" style="color: #16A34A">Retiros</span>
               </router-link>

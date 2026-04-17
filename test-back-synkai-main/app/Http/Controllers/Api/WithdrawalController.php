@@ -9,6 +9,16 @@ use Illuminate\Http\Request;
 
 class WithdrawalController extends Controller
 {
+    public function index(Request $request)
+    {
+        $rows = Withdrawal::query()
+            ->where('user_id', $request->user()->id)
+            ->orderByDesc('created_at')
+            ->paginate((int) $request->query('per_page', 25));
+
+        return response()->json($rows);
+    }
+
     public function store(Request $request, WithdrawalService $withdrawalService)
     {
         $data = $request->validate([

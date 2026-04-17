@@ -53,6 +53,14 @@
                   Copiar
                 </button>
               </div>
+              <div class="text-xs text-muted mb-1 mt-3">URL cliente preferente</div>
+              <div class="input-group">
+                <input ref="inputLinkPref" type="text" class="form-control" :value="linkPreferenteCompleto" readonly />
+                <button class="btn btn-outline-success mb-0" type="button" @click="copiarLinkPreferente">
+                  <i class="ni ni-copy me-1"></i>
+                  Copiar
+                </button>
+              </div>
               <div class="d-flex flex-wrap gap-2 mt-3">
                 <span class="badge bg-light text-primary text-xxs">
                   Tu código: <strong>{{ miCodigo || "—" }}</strong>
@@ -177,14 +185,15 @@ export default {
       if (!code) {
         return "";
       }
-      const href = router.resolve({
-        name: "Invite",
-        params: { sponsorCode: code },
-      }).href;
-      if (href.startsWith("http")) {
-        return href;
-      }
-      return `${window.location.origin}${href}`;
+      // Robusto en dev/prod (baseUrl): construye path directo.
+      const href = router.resolve({ path: `/i/${code}` }).href;
+      return href.startsWith("http") ? href : `${window.location.origin}${href}`;
+    },
+    linkPreferenteCompleto() {
+      const code = this.miCodigo;
+      if (!code) return "";
+      const href = router.resolve({ path: `/ref-pref/${code}` }).href;
+      return href.startsWith("http") ? href : `${window.location.origin}${href}`;
     },
   },
   mounted() {
@@ -241,6 +250,19 @@ export default {
         navigator.clipboard.writeText(text);
       } else {
         const el = this.$refs.inputLink;
+        if (el) {
+          el.select();
+          document.execCommand("copy");
+        }
+      }
+    },
+    copiarLinkPreferente() {
+      const text = this.linkPreferenteCompleto;
+      if (!text) return;
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text);
+      } else {
+        const el = this.$refs.inputLinkPref;
         if (el) {
           el.select();
           document.execCommand("copy");

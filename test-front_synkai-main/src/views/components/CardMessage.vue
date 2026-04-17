@@ -12,7 +12,7 @@
               data-bs-placement="top"
               title="2 New Messages"
             >
-              <img alt="Image placeholder" src="@/assets/img/team-1.jpg" />
+              <img alt="Image placeholder" src="@/assets/img/synkailogo2.png" />
             </a>
             <a
               href="javascript:;"
@@ -21,7 +21,7 @@
               data-bs-placement="top"
               title="1 New Message"
             >
-              <img alt="Image placeholder" src="@/assets/img/team-2.jpg" />
+              <img alt="Image placeholder" src="@/assets/img/synkailogo2.png" />
             </a>
             <a
               href="javascript:;"
@@ -30,7 +30,7 @@
               data-bs-placement="top"
               title="13 New Messages"
             >
-              <img alt="Image placeholder" src="@/assets/img/team-3.jpg" />
+              <img alt="Image placeholder" src="@/assets/img/synkailogo2.png" />
             </a>
             <a
               href="javascript:;"
@@ -39,7 +39,7 @@
               data-bs-placement="top"
               title="7 New Messages"
             >
-              <img alt="Image placeholder" src="@/assets/img/team-4.jpg" />
+              <img alt="Image placeholder" src="@/assets/img/synkailogo2.png" />
             </a>
           </div>
         </div>

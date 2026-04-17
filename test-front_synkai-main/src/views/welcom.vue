@@ -202,7 +202,7 @@ onUnmounted(() => {
               con TBN LIVING
             </h1>
             <p class="lead text-white opacity-9 mb-4">
-              Somos una compañía especializada en la creación de fórmulas únicas, preparadas a base de aceites esenciales y vegetales premium, que proporciona una alternativa natural y eficaz para el tratamiento y la prevención de trastornos en la salud.
+              Somos una compañía especializada en la creación de fórmulas únicas, preparadas a base de aceites esenciales y vegetales premium, que proporciona una alternativa natural y eficaz para la prevencion y bienestar de la salud.
             </p>
             <div class="d-flex flex-wrap gap-2">
               <argon-button color="warning" variant="gradient" size="md" @click="goSignup">

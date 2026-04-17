@@ -23,6 +23,7 @@ class AuthRegisterController extends Controller
             'country_code' => ['nullable', 'string', 'size:2'],
             'registration_package_id' => ['nullable', 'integer', 'exists:packages,id'],
             'preferred_payment_method' => ['nullable', 'string', 'max:32'],
+            'preferred_binary_leg' => ['nullable', 'string', 'in:left,right,auto'],
         ]);
 
         $sponsorId = null;
@@ -60,9 +61,11 @@ class AuthRegisterController extends Controller
             'phone' => $validated['phone'],
             'birth_date' => $validated['birth_date'],
             'sponsor_id' => $sponsorId,
+            'preferred_binary_leg' => $validated['preferred_binary_leg'] ?? null,
             'account_type' => 'member',
             'rank_id' => Rank::query()->where('slug', 'activo')->value('id'),
-            'account_status' => 'active',
+            // Regla: hasta pagar el paquete de activación, el socio queda pendiente.
+            'account_status' => 'pending',
             'country_code' => isset($validated['country_code']) ? strtoupper($validated['country_code']) : null,
             'registration_package_id' => $packageId,
             'preferred_payment_method' => $validated['preferred_payment_method'] ?? null,

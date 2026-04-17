@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import ArgonButton from "@/components/ArgonButton.vue";
+import qrImageUrl from "@/assets/img/QRimage.jpeg";
 
 const props = defineProps({
   paquete: {
@@ -329,9 +330,9 @@ const pagar = () => {
             <div class="col-md-5">
               <div class="qr-box d-flex align-items-center justify-content-center">
                 <div class="text-center">
-                  <div class="text-xs text-muted mb-2">QR (demo)</div>
-                  <div class="qr-placeholder mx-auto"></div>
-                  <div class="text-xs text-muted mt-2 mb-0">Conecta con backend para QR real</div>
+                  <div class="text-xs text-muted mb-2">Escanea el QR</div>
+                  <img :src="qrImageUrl" alt="QR de pago" class="qr-image mx-auto" />
+                  <div class="text-xs text-muted mt-2 mb-0">Si no puedes escanear, amplía la imagen.</div>
                 </div>
               </div>
             </div>
@@ -422,17 +423,13 @@ const pagar = () => {
   min-height: 220px;
 }
 
-.qr-placeholder {
-  width: 160px;
-  height: 160px;
+.qr-image {
+  width: 180px;
+  height: 180px;
   border-radius: 1rem;
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(84, 177, 68, 0.2),
-    rgba(84, 177, 68, 0.2) 6px,
-    rgba(84, 177, 68, 0.06) 6px,
-    rgba(84, 177, 68, 0.06) 12px
-  );
+  object-fit: contain;
+  background: #fff;
   border: 1px solid rgba(34, 45, 37, 0.2);
+  padding: 0.5rem;
 }
 </style>

@@ -1,12 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
-import { fetchReferrals } from "@/services/me";
+import { fetchReferrals, fetchUnilevelTree } from "@/services/me";
 
 const loading = ref(true);
 const error = ref("");
 const items = ref([]);
 const summary = ref({ total: 0, activos: 0, pendientes: 0, izquierda: 0, derecha: 0 });
+const uniTree = ref(null);
 
 onMounted(async () => {
   loading.value = true;
@@ -15,6 +16,7 @@ onMounted(async () => {
     const data = await fetchReferrals();
     items.value = data.items || [];
     summary.value = data.summary || summary.value;
+    uniTree.value = await fetchUnilevelTree(3);
   } catch {
     error.value = "No se pudieron cargar los referidos.";
   } finally {
@@ -69,13 +71,41 @@ const referidos = computed(() =>
   }))
 );
 
-/** Un nivel: todos los directos, orden por fecha de ingreso (más reciente primero), luego pierna I/D. */
+/** Un nivel: todos los directos, orden por fecha de ingreso (primero llega, primero se muestra), luego pierna I/D. */
 const referidosOrdenados = computed(() => {
   return [...referidos.value].sort((a, b) => {
-    if (b.joinedAtMs !== a.joinedAtMs) return b.joinedAtMs - a.joinedAtMs;
+    if (a.joinedAtMs !== b.joinedAtMs) return a.joinedAtMs - b.joinedAtMs;
     return legSortKey(a.pierna) - legSortKey(b.pierna);
   });
 });
+
+// Matriz unilevel (solo 1ª línea): TU -> S1 -> S2 -> S3 ... en orden de ingreso.
+const unilevelChain = computed(() => referidosOrdenados.value);
+
+const childrenBySponsor = computed(() => uniTree.value?.children_by_sponsor || {});
+
+function mapUniNode(n) {
+  return {
+    id: n.id,
+    sponsorId: n.sponsor_id,
+    nombre: n.name,
+    fechaAlta: n.fecha_alta || "—",
+    joinedAtMs: n.joined_at ? Date.parse(n.joined_at) : 0,
+    estadoRaw: n.account_status,
+    rango: n.rank_name || "—",
+    iniciales: iniciales(n.name),
+    pv: Number(n.monthly_qualifying_pv || 0),
+  };
+}
+
+const gen1 = computed(() => (uniTree.value?.levels?.["1"] || []).map(mapUniNode));
+const gen2 = computed(() => (uniTree.value?.levels?.["2"] || []).map(mapUniNode));
+
+function statusChipClass(raw) {
+  if (raw === "active") return "bg-gradient-success";
+  if (raw === "pending") return "bg-gradient-warning";
+  return "bg-gradient-secondary";
+}
 
 const stats = computed(() => ({
   total: summary.value.total ?? referidos.value.length,
@@ -164,6 +194,139 @@ function badgeClaseEstado(ref) {
             shape: 'rounded-circle',
           }"
         />
+      </div>
+    </div>
+
+    <!-- Matrices (solo primera línea) -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header border-0 pb-0 pt-3 px-3 px-md-4 bg-transparent">
+            <h6 class="mb-0 font-weight-bolder text-dark">Matriz Unilevel (1.ª línea)</h6>
+            <p class="text-xs text-secondary mb-0 mt-1">Primero llega → primero se muestra.</p>
+          </div>
+          <div class="card-body px-3 px-md-4 pb-4">
+            <div class="matrix-unilevel">
+              <div class="matrix-node matrix-node--root">
+                <div class="matrix-avatar bg-gradient-dark text-white shadow">TU</div>
+              </div>
+              <template v-if="unilevelChain.length">
+                <div v-for="r in unilevelChain" :key="'uni-' + r.id" class="matrix-row">
+                  <div class="matrix-connector" aria-hidden="true" />
+                  <div class="matrix-node">
+                    <div
+                      class="matrix-avatar text-white shadow"
+                      :class="r.pierna === 'left' ? 'bg-gradient-primary' : r.pierna === 'right' ? 'bg-gradient-success' : 'bg-gradient-secondary'"
+                    >
+                      {{ r.iniciales }}
+                    </div>
+                    <div class="matrix-meta min-w-0">
+                      <div class="text-sm font-weight-bolder text-dark text-truncate">{{ r.nombre }}</div>
+                      <div class="text-xxs text-secondary">{{ r.fechaAlta }} · {{ r.volumen }}</div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="text-sm text-muted mt-3">Aún no tienes socios en 1.ª línea.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header border-0 pb-0 pt-3 px-3 px-md-4 bg-transparent">
+            <h6 class="mb-0 font-weight-bolder text-dark">Matriz Unilevel (3 generaciones)</h6>
+            <p class="text-xs text-secondary mb-0 mt-1">
+              Directos (G1) y descendencias (G2, G3) por patrocinio, en estructura tipo árbol.
+            </p>
+          </div>
+          <div class="card-body px-3 px-md-4 pb-4">
+            <div class="uni3">
+              <div class="uni3__rootRow">
+                <div class="uni3__rootNode">
+                  <div class="uni3__avatar bg-gradient-dark text-white shadow">TU</div>
+                </div>
+              </div>
+
+              <div v-if="gen1.length" class="uni3__grid">
+                <div class="uni3__col">
+                  <div class="uni3__colTitle">G1</div>
+                  <div class="d-grid gap-2">
+                    <div v-for="a in gen1" :key="'g1-' + a.id" class="uni3__node">
+                      <div class="uni3__avatar bg-gradient-primary text-white shadow">{{ a.iniciales }}</div>
+                      <div class="uni3__meta min-w-0">
+                        <div class="text-sm font-weight-bolder text-dark text-truncate">{{ a.nombre }}</div>
+                        <div class="text-xxs text-secondary">
+                          {{ a.fechaAlta }} · {{ a.rango }} · {{ formatPv(a.pv) }}
+                        </div>
+                      </div>
+                      <span class="badge badge-sm ms-auto" :class="statusChipClass(a.estadoRaw)">
+                        {{ a.estadoRaw === "active" ? "Activo" : a.estadoRaw === "pending" ? "Pendiente" : "—" }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="uni3__col">
+                  <div class="uni3__colTitle">G2</div>
+                  <div class="d-grid gap-2">
+                    <div v-for="a in gen1" :key="'g2grp-' + a.id">
+                      <div v-if="(childrenBySponsor[String(a.id)] || []).length" class="uni3__group">
+                        <div class="uni3__groupHint text-xxs text-muted">↓ de {{ a.iniciales }}</div>
+                        <div
+                          v-for="b in (childrenBySponsor[String(a.id)] || []).map(mapUniNode)"
+                          :key="'g2-' + b.id"
+                          class="uni3__node"
+                        >
+                          <div class="uni3__avatar bg-gradient-info text-white shadow">{{ b.iniciales }}</div>
+                          <div class="uni3__meta min-w-0">
+                            <div class="text-sm font-weight-bolder text-dark text-truncate">{{ b.nombre }}</div>
+                            <div class="text-xxs text-secondary">
+                              {{ b.fechaAlta }} · {{ b.rango }} · {{ formatPv(b.pv) }}
+                            </div>
+                          </div>
+                          <span class="badge badge-sm ms-auto" :class="statusChipClass(b.estadoRaw)">
+                            {{ b.estadoRaw === "active" ? "Activo" : b.estadoRaw === "pending" ? "Pendiente" : "—" }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="uni3__col">
+                  <div class="uni3__colTitle">G3</div>
+                  <div class="d-grid gap-2">
+                    <div v-for="b in gen2" :key="'g3grp-' + b.id">
+                      <div v-if="(childrenBySponsor[String(b.id)] || []).length" class="uni3__group">
+                        <div class="uni3__groupHint text-xxs text-muted">↓ de {{ b.iniciales }}</div>
+                        <div
+                          v-for="c in (childrenBySponsor[String(b.id)] || []).map(mapUniNode)"
+                          :key="'g3-' + c.id"
+                          class="uni3__node"
+                        >
+                          <div class="uni3__avatar bg-gradient-success text-white shadow">{{ c.iniciales }}</div>
+                          <div class="uni3__meta min-w-0">
+                            <div class="text-sm font-weight-bolder text-dark text-truncate">{{ c.nombre }}</div>
+                            <div class="text-xxs text-secondary">
+                              {{ c.fechaAlta }} · {{ c.rango }} · {{ formatPv(c.pv) }}
+                            </div>
+                          </div>
+                          <span class="badge badge-sm ms-auto" :class="statusChipClass(c.estadoRaw)">
+                            {{ c.estadoRaw === "active" ? "Activo" : c.estadoRaw === "pending" ? "Pendiente" : "—" }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="text-sm text-muted mt-2">Aún no tienes socios directos (G1).</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -319,6 +482,75 @@ function badgeClaseEstado(ref) {
 .text-xxs {
   font-size: 0.65rem;
 }
+.matrix-unilevel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.matrix-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.matrix-connector {
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8898aa 0%, #54b144 100%);
+  opacity: 0.9;
+}
+.matrix-node {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.75rem;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  width: 100%;
+  min-width: 0;
+}
+.matrix-node--root {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.matrix-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 0.75rem;
+}
+.matrix-meta {
+  min-width: 0;
+}
+.matrix-binary__branches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+.matrix-binary__col {
+  border: 1px solid #e9ecef;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  background: #fff;
+  min-width: 0;
+}
+.matrix-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f1f3f5;
+  min-width: 0;
+}
+.matrix-chip:last-child {
+  border-bottom: none;
+}
 .unilevel-rail {
   display: flex;
   align-items: stretch;
@@ -388,6 +620,66 @@ function badgeClaseEstado(ref) {
 .referidos-table th,
 .referidos-table td {
   vertical-align: middle;
+}
+
+.uni3__rootRow {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 0.75rem;
+}
+.uni3__rootNode {
+  display: inline-flex;
+  align-items: center;
+}
+.uni3__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.uni3__colTitle {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #6c757d;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+.uni3__node {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.85);
+}
+.uni3__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.65rem;
+  flex: 0 0 auto;
+}
+.uni3__meta {
+  min-width: 0;
+}
+.uni3__group {
+  padding: 0.4rem;
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+}
+.uni3__groupHint {
+  margin-bottom: 0.35rem;
+}
+@media (max-width: 991.98px) {
+  .uni3__grid {
+    grid-template-columns: 1fr;
+  }
 }
 @media (max-width: 575.98px) {
   .unilevel-rail {

@@ -10,6 +10,9 @@
       </div>
     </div>
 
+    <div v-if="error" class="container pt-5">
+      <div class="alert alert-danger text-white">{{ error }}</div>
+    </div>
     <!-- Hero -->
     <section class="hero-landing position-relative overflow-hidden">
       <div class="hero-bg"></div>
@@ -172,6 +175,8 @@
 </template>
 
 <script>
+import { fetchMyLanding, fetchProfile, fetchPublicLanding } from "@/services/me";
+
 export default {
   name: "LandingPersonal",
   data() {
@@ -198,33 +203,68 @@ export default {
         { icon: "ni ni-single-02", titulo: "Soporte personal", texto: "Te acompaño en tus primeros pasos." },
         { icon: "ni ni-world", titulo: "Flexibilidad", texto: "Trabaja desde donde quieras, cuando quieras." },
       ],
+      loading: false,
+      error: "",
     };
   },
-  created() {
-    // Perfil guardado desde Mi cuenta al hacer clic en "Ver mi landing"
-    try {
-      const saved = sessionStorage.getItem("landingPerfil");
-      if (saved) {
-        const data = JSON.parse(saved);
-        this.perfil = { ...this.perfil, ...data };
-        return;
-      }
-    } catch (_) { /* sin perfil guardado */ }
-    // Fallback: store
+  async created() {
+    // Siempre renderizar como landing pública (sin sidenav/navbar del dashboard)
     try {
       const store = this.$store;
-      if (store && store.state && store.state.user) {
-        const u = store.state.user;
-        this.perfil = {
-          nombre: u.nombre || u.name || this.perfil.nombre,
-          email: u.email || this.perfil.email,
-          telefono: u.telefono || u.phone || this.perfil.telefono,
-          bio: u.bio || this.perfil.bio,
-          tagline: u.tagline || this.perfil.tagline,
-          foto: u.foto || u.avatar || "",
-        };
+      if (store && store.state) {
+        store.state.hideConfigButton = true;
+        store.state.showNavbar = false;
+        store.state.showSidenav = false;
+        store.state.showFooter = false;
+        store.state.layout = "landing";
       }
-    } catch (_) { /* store no disponible */ }
+      document.body.classList.remove("bg-gray-100");
+    } catch (_) { /* ignore */ }
+
+    this.loading = true;
+    this.error = "";
+    try {
+      const memberCode = this.$route?.params?.memberCode;
+      if (memberCode) {
+        // Landing pública por código
+        const data = await fetchPublicLanding(String(memberCode));
+        const user = data.user || {};
+        const landing = data.landing || {};
+        this.perfil = {
+          ...this.perfil,
+          nombre: user.name || this.perfil.nombre,
+          email: landing.email || user.email || this.perfil.email,
+          telefono: landing.phone || user.phone || this.perfil.telefono,
+          bio: landing.bio || this.perfil.bio,
+          tagline: landing.tagline || this.perfil.tagline,
+          foto: landing.foto || "",
+        };
+        if (Array.isArray(landing.videos) && landing.videos.length) {
+          this.videos = landing.videos;
+        }
+        return;
+      }
+
+      // Vista de mi landing (autenticado): toma datos desde API
+      const [u, l] = await Promise.all([fetchProfile(), fetchMyLanding()]);
+      const landing = l.landing || {};
+      this.perfil = {
+        ...this.perfil,
+        nombre: u.name || this.perfil.nombre,
+        email: landing.email || u.email || this.perfil.email,
+        telefono: landing.phone || u.phone || this.perfil.telefono,
+        bio: landing.bio || this.perfil.bio,
+        tagline: landing.tagline || this.perfil.tagline,
+        foto: landing.foto || "",
+      };
+      if (Array.isArray(landing.videos) && landing.videos.length) {
+        this.videos = landing.videos;
+      }
+    } catch (_) {
+      this.error = "No se pudo cargar la landing.";
+    } finally {
+      this.loading = false;
+    }
   },
   methods: {
     initials(nombre) {

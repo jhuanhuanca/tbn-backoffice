@@ -10,10 +10,15 @@ use Illuminate\Http\Request;
 class BinaryPlacementSelfController extends Controller
 {
     /**
-     * Colocación automática en el primer hueco libre bajo el patrocinador (tras activación pagada).
+     * Colocación binaria tras activación pagada.
+     * Opciones: left | right | auto.
      */
     public function store(Request $request, BinaryService $binaryService)
     {
+        $data = $request->validate([
+            'placement' => 'nullable|string|in:left,right,auto',
+        ]);
+
         $user = $request->user();
         if ($user->canAccessAdminPanel()) {
             return response()->json([
@@ -30,7 +35,21 @@ class BinaryPlacementSelfController extends Controller
             return response()->json(['message' => 'Ya tienes colocación binaria.'], 422);
         }
 
-        $placement = $binaryService->placeUserInFirstFreeSlot($user);
+        // Si el usuario ya definió preferencia al registrarse, usarla por defecto.
+        $placementPref = $data['placement'] ?? ($user->preferred_binary_leg ?: 'auto');
+        if ($placementPref === 'left') {
+            $placement = $binaryService->placeUserDirectUnderSponsor($user, \App\Models\BinaryPlacement::LEG_LEFT);
+            if (! $placement) {
+                return response()->json(['message' => 'La pierna izquierda de tu patrocinador ya está ocupada.'], 422);
+            }
+        } elseif ($placementPref === 'right') {
+            $placement = $binaryService->placeUserDirectUnderSponsor($user, \App\Models\BinaryPlacement::LEG_RIGHT);
+            if (! $placement) {
+                return response()->json(['message' => 'La pierna derecha de tu patrocinador ya está ocupada.'], 422);
+            }
+        } else {
+            $placement = $binaryService->placeUserInFirstFreeSlot($user);
+        }
         if (! $placement) {
             return response()->json([
                 'message' => 'No hay posición libre bajo tu patrocinador. Contacta a soporte.',
@@ -44,7 +63,9 @@ class BinaryPlacementSelfController extends Controller
             ->get();
 
         foreach ($orders as $o) {
-            $binaryService->acumularVolumenBinarioPorPedido($o->fresh(['items.product', 'items.package']));
+            /** @var Order $o */
+            $o->load(['items.product', 'items.package']);
+            $binaryService->acumularVolumenBinarioPorPedido($o);
         }
 
         return response()->json($placement, 201);

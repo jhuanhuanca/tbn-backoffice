@@ -1,281 +1,146 @@
-<template>
-    <div class="campaigns-container">
-        <!-- Header -->
-        <div class="header">
-            <h1>Gestión de Campañas Automáticas</h1>
-            <p>Automatiza tus comunicaciones y segmenta tus leads</p>
-        </div>
+<script setup>
+import { computed } from "vue";
+import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 
-        <!-- Cards Grid -->
-        <div class="cards-grid">
-            <!-- Email Campaigns -->
-            <div class="card">
-                <div class="card-icon email-icon">📧</div>
-                <h3>Campañas Email</h3>
-                <p>Crea y automatiza secuencias de email personalizadas para tus prospectos</p>
-                <button class="btn btn-primary">Crear Campaña</button>
-            </div>
+const stats = computed(() => ({
+  active: 12,
+  segmented: 1240,
+  conversion: 28,
+  sent: 5890,
+}));
 
-            <!-- SMS Campaigns -->
-            <div class="card">
-                <div class="card-icon sms-icon">💬</div>
-                <h3>Campañas SMS</h3>
-                <p>Envía mensajes automáticos segmentados a tus leads en tiempo real</p>
-                <button class="btn btn-primary">Crear Campaña</button>
-            </div>
-
-            <!-- WhatsApp Campaigns -->
-            <div class="card">
-                <div class="card-icon whatsapp-icon">📱</div>
-                <h3>WhatsApp Automático</h3>
-                <p>Automatiza conversaciones en WhatsApp con secuencias inteligentes</p>
-                <button class="btn btn-primary">Crear Campaña</button>
-            </div>
-
-            <!-- Sequences -->
-            <div class="card">
-                <div class="card-icon sequence-icon">🔄</div>
-                <h3>Secuencias Automáticas</h3>
-                <p>Configura flujos automáticos multi-canal para convertir prospectos</p>
-                <button class="btn btn-primary">Crear Secuencia</button>
-            </div>
-
-            <!-- Lead Segmentation -->
-            <div class="card">
-                <div class="card-icon segment-icon">🎯</div>
-                <h3>Segmentación de Leads</h3>
-                <p>Organiza y segmenta tu base de datos por criterios personalizados</p>
-                <button class="btn btn-primary">Segmentar Leads</button>
-            </div>
-
-            <!-- Social Media Integration -->
-            <div class="card">
-                <div class="card-icon social-icon">🌐</div>
-                <h3>Integración Redes Sociales</h3>
-                <p>Conecta tus campañas con Instagram, Facebook, LinkedIn y más</p>
-                <button class="btn btn-primary">Integrar Redes</button>
-            </div>
-        </div>
-
-        <!-- Stats Section -->
-        <div class="stats-section">
-            <div class="stat-card">
-                <h4>Campañas Activas</h4>
-                <p class="stat-number">12</p>
-            </div>
-            <div class="stat-card">
-                <h4>Leads Segmentados</h4>
-                <p class="stat-number">1,240</p>
-            </div>
-            <div class="stat-card">
-                <h4>Tasa de Conversión</h4>
-                <p class="stat-number">28%</p>
-            </div>
-            <div class="stat-card">
-                <h4>Mensajes Enviados</h4>
-                <p class="stat-number">5,890</p>
-            </div>
-        </div>
-    </div>
-</template>
-
-<script>
-export default {
-    name: 'CardCampañas',
-    data() {
-        return {}
-    }
-}
+const blocks = [
+  {
+    title: "Onboarding 72h",
+    desc: "Secuencia automática para nuevos referidos: bienvenida, pasos de activación y primer pedido.",
+    icon: "ni ni-collection",
+    grad: "bg-gradient-primary",
+    cta: "Configurar",
+  },
+  {
+    title: "Reactivación 30 días",
+    desc: "Detecta socios sin compra reciente y envía recordatorios + contenido de valor.",
+    icon: "ni ni-time-alarm",
+    grad: "bg-gradient-warning",
+    cta: "Crear campaña",
+  },
+  {
+    title: "WhatsApp follow-up",
+    desc: "Plantillas para seguimiento de prospectos (sin spam) con tareas y etiquetas.",
+    icon: "ni ni-chat-round",
+    grad: "bg-gradient-success",
+    cta: "Ver plantillas",
+  },
+  {
+    title: "Segmentación de leads",
+    desc: "Segmenta por fuente, país, interés, estado (activo/pendiente) y PV mensual.",
+    icon: "ni ni-bullet-list-67",
+    grad: "bg-gradient-info",
+    cta: "Segmentar",
+  },
+  {
+    title: "Campañas por rango",
+    desc: "Mensajes y recursos distintos para cada rango (activación, liderazgo, retención).",
+    icon: "ni ni-badge",
+    grad: "bg-gradient-danger",
+    cta: "Definir reglas",
+  },
+  {
+    title: "Calendario de contenidos",
+    desc: "Agenda publicaciones y materiales para tu equipo (guiones, flyers, videos).",
+    icon: "ni ni-calendar-grid-58",
+    grad: "bg-gradient-dark",
+    cta: "Abrir calendario",
+  },
+];
 </script>
 
+<template>
+  <div class="py-4 container-fluid">
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card border-0 shadow">
+          <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+              <h3 class="mb-1 text-dark font-weight-bolder">Campañas automáticas</h3>
+              <p class="text-sm text-secondary mb-0">
+                Automatiza el seguimiento de prospectos y socios, con segmentación y métricas.
+              </p>
+            </div>
+            <button type="button" class="btn btn-success btn-sm shadow-sm">
+              <i class="ni ni-fat-add me-2"></i>
+              Nueva campaña
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-lg-3 col-md-6 col-12">
+        <mini-statistics-card
+          title="Campañas activas"
+          :value="String(stats.active)"
+          description="<span class='text-sm font-weight-bolder text-success'>Automatizadas</span> en ejecución"
+          :icon="{ component: 'ni ni-send', background: 'bg-gradient-success', shape: 'rounded-circle' }"
+        />
+      </div>
+      <div class="col-lg-3 col-md-6 col-12">
+        <mini-statistics-card
+          title="Leads segmentados"
+          :value="String(stats.segmented)"
+          description="<span class='text-sm font-weight-bolder text-info'>Audiencias</span> listas"
+          :icon="{ component: 'ni ni-tag', background: 'bg-gradient-info', shape: 'rounded-circle' }"
+        />
+      </div>
+      <div class="col-lg-3 col-md-6 col-12">
+        <mini-statistics-card
+          title="Conversión"
+          :value="`${stats.conversion}%`"
+          description="<span class='text-sm font-weight-bolder text-warning'>Eficiencia</span> (demo)"
+          :icon="{ component: 'ni ni-chart-bar-32', background: 'bg-gradient-warning', shape: 'rounded-circle' }"
+        />
+      </div>
+      <div class="col-lg-3 col-md-6 col-12">
+        <mini-statistics-card
+          title="Mensajes enviados"
+          :value="String(stats.sent)"
+          description="<span class='text-sm font-weight-bolder text-secondary'>Últimos</span> 30 días (demo)"
+          :icon="{ component: 'ni ni-email-83', background: 'bg-gradient-primary', shape: 'rounded-circle' }"
+        />
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div v-for="b in blocks" :key="b.title" class="col-md-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 campaign-card">
+          <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+              <div class="icon icon-shape icon-md shadow text-center" :class="`${b.grad} rounded-circle`">
+                <i class="ni text-white opacity-10 text-lg" :class="b.icon" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-dark font-weight-bolder mb-1">{{ b.title }}</div>
+                <div class="text-sm text-secondary mb-3">{{ b.desc }}</div>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100">
+                  {{ b.cta }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
 <style scoped>
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+.campaign-card {
+  border-radius: 1rem;
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
 }
-
-.campaigns-container {
-    background: linear-gradient(135deg, #ffffff 0%, rgba(84, 177, 68, 0.08) 100%);
-    padding: 40px 20px;
-    min-height: 100vh;
-}
-
-.header {
-    text-align: center;
-    margin-bottom: 50px;
-    animation: slideDown 0.6s ease-out;
-}
-
-.header h1 {
-    font-size: 2.5rem;
-    color: #222d25;
-    margin-bottom: 10px;
-    font-weight: 700;
-}
-
-.header p {
-    font-size: 1.1rem;
-    color: #54b144;
-}
-
-.cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 25px;
-    margin-bottom: 50px;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.card {
-    background: white;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 15px rgba(84, 177, 68, 0.08);
-    transition: all 0.3s ease;
-    border-left: 4px solid #54b144;
-    animation: slideUp 0.6s ease-out;
-}
-
-.card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 12px 25px rgba(84, 177, 68, 0.15);
-    border-left-color: #222d25;
-}
-
-.card-icon {
-    font-size: 3rem;
-    margin-bottom: 15px;
-    display: inline-block;
-    padding: 15px;
-    border-radius: 10px;
-}
-
-.email-icon {
-    background-color: #dcfce7;
-}
-
-.sms-icon {
-    background-color: #bbf7d0;
-}
-
-.whatsapp-icon {
-    background-color: #a7f3d0;
-}
-
-.sequence-icon {
-    background-color: #86efac;
-}
-
-.segment-icon {
-    background-color: #6ee7b7;
-}
-
-.social-icon {
-    background-color: #5eead4;
-}
-
-.card h3 {
-    font-size: 1.4rem;
-    color: #222d25;
-    margin-bottom: 10px;
-    font-weight: 600;
-}
-
-.card p {
-    color: #6b7280;
-    line-height: 1.6;
-    margin-bottom: 20px;
-    font-size: 0.95rem;
-}
-
-.btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    width: 100%;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #54b144 0%, #222d25 100%);
-    color: white;
-}
-
-.btn-primary:hover {
-    background: linear-gradient(135deg, #222d25 0%, #1a2219 100%);
-    transform: scale(1.02);
-}
-
-.stats-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.stat-card {
-    background: white;
-    padding: 25px;
-    border-radius: 10px;
-    text-align: center;
-    box-shadow: 0 4px 15px rgba(84, 177, 68, 0.08);
-    border-top: 3px solid #54b144;
-}
-
-.stat-card h4 {
-    color: #6c757d;
-    font-size: 0.95rem;
-    margin-bottom: 10px;
-    font-weight: 500;
-}
-
-.stat-number {
-    font-size: 2rem;
-    color: #222d25;
-    font-weight: 700;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@media (max-width: 768px) {
-    .header h1 {
-        font-size: 1.8rem;
-    }
-
-    .cards-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .stats-section {
-        grid-template-columns: repeat(2, 1fr);
-    }
+.campaign-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0.55rem 1.5rem rgba(0, 0, 0, 0.08) !important;
 }
 </style>

@@ -154,6 +154,9 @@ async function submit() {
                       type="text"
                       placeholder="Ej. 1234567 LP o NIT"
                       name="document_id"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      spellcheck="false"
                       size="lg"
                     />
                     <p class="text-xxs text-secondary mb-0 mt-1">5–32 caracteres: letras, números, punto o guion.</p>
@@ -177,6 +180,7 @@ async function submit() {
                       type="email"
                       placeholder="correo@ejemplo.com"
                       name="email"
+                      autocomplete="email"
                       size="lg"
                     />
                   </div>

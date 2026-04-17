@@ -278,6 +278,39 @@ class BinaryService
     }
 
     /**
+     * Coloca al usuario directamente bajo su patrocinador en una pierna específica (si está libre).
+     * Devuelve null si el slot está ocupado o si la pierna es inválida.
+     */
+    public function placeUserDirectUnderSponsor(User $user, string $leg): ?BinaryPlacement
+    {
+        if ($user->binaryPlacement()->exists()) {
+            return $user->binaryPlacement;
+        }
+        if (! $user->sponsor_id) {
+            return null;
+        }
+        if (! in_array($leg, [BinaryPlacement::LEG_LEFT, BinaryPlacement::LEG_RIGHT], true)) {
+            return null;
+        }
+
+        $parentId = (int) $user->sponsor_id;
+        if ($this->legOccupied($parentId, $leg)) {
+            return null;
+        }
+
+        $placement = BinaryPlacement::query()->create([
+            'user_id' => $user->id,
+            'parent_user_id' => $parentId,
+            'leg_position' => $leg,
+        ]);
+
+        $this->olvidarCacheArbol($user->id);
+        $this->olvidarCacheArbol($parentId);
+
+        return $placement;
+    }
+
+    /**
      * @return array{parent_user_id:int, leg_position:string}|null
      */
     protected function findFirstFreeSlotUnder(int $rootSponsorId): ?array

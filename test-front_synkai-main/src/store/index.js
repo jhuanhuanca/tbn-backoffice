@@ -27,6 +27,7 @@ export default createStore({
     showNavbar: true,
     showFooter: true,
     showMain: true,
+    appLoading: false,
     layout: "default",
   },
   mutations: {
@@ -35,6 +36,9 @@ export default createStore({
     },
     setPinned(state, value) {
       state.isPinned = !!value;
+    },
+    setAppLoading(state, value) {
+      state.appLoading = !!value;
     },
     sidebarMinimize(state) {
       state.isPinned = !state.isPinned;

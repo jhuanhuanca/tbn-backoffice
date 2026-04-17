@@ -15,11 +15,21 @@ class OrderController extends Controller
 {
     public function index(Request $request)
     {
-        $orders = Order::query()
+        $q = Order::query()
             ->where('user_id', $request->user()->id)
             ->with(['items.product', 'items.package'])
-            ->orderByDesc('created_at')
-            ->paginate(25);
+            ->orderByDesc('created_at');
+
+        $estado = $request->query('estado');
+        if (is_string($estado) && $estado !== '') {
+            $q->where('estado', $estado);
+        }
+        $tipo = $request->query('tipo');
+        if (is_string($tipo) && $tipo !== '') {
+            $q->where('tipo', $tipo);
+        }
+
+        $orders = $q->paginate(25);
 
         return response()->json($orders);
     }
@@ -70,6 +80,24 @@ class OrderController extends Controller
                 return response()->json([
                     'message' => 'Para activar tu cuenta el pedido debe incluir al menos un paquete.',
                 ], 422);
+            }
+
+            // Evitar confirmaciones reiteradas: si ya existe una activación pendiente de pago, reusar y no crear otra.
+            if (($data['tipo'] ?? '') === 'paquete' && ! $immediate) {
+                $existing = Order::query()
+                    ->where('user_id', $buyer->id)
+                    ->where('estado', 'pendiente_pago')
+                    ->where('tipo', 'paquete')
+                    ->orderByDesc('created_at')
+                    ->with(['items.package'])
+                    ->first();
+
+                if ($existing) {
+                    return response()->json([
+                        'message' => 'Ya tienes un pedido de activación pendiente de confirmación. Espera la validación de administración.',
+                        'order' => $existing,
+                    ], 409);
+                }
             }
         }
 
@@ -172,7 +200,10 @@ class OrderController extends Controller
             if (! $buyer->canAccessAdminPanel() && ! $buyer->isPreferredCustomer()) {
                 foreach ($order->items as $item) {
                     if ($item->package_id && $buyer->activation_paid_at === null) {
-                        $buyer->forceFill(['activation_paid_at' => now()])->save();
+                        $buyer->forceFill([
+                            'activation_paid_at' => now(),
+                            'account_status' => 'active',
+                        ])->save();
                         break;
                     }
                 }

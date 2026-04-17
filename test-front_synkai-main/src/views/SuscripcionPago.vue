@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 import { useStore } from "vuex";
 import ArgonButton from "@/components/ArgonButton.vue";
 import MlmPaymentMethodPanel from "@/components/MlmPaymentMethodPanel.vue";
-import { fetchPackages, createOrder, fetchProfile } from "@/services/me";
+import { fetchPackages, createOrder, fetchProfile, fetchOrders } from "@/services/me";
 import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
 
 const store = useStore();
@@ -19,6 +19,9 @@ const err = ref("");
 const infoMsg = ref("");
 const paymentMethod = ref("tarjeta");
 const paymentOptions = REGISTRATION_PAYMENT_METHODS;
+const hasPendingActivation = ref(false);
+const pendingOrderId = ref(null);
+let pollTimer = null;
 
 const selectedPkg = computed(() =>
   packagesList.value.find((p) => String(p.id) === String(selectedId.value))
@@ -44,6 +47,10 @@ onBeforeUnmount(() => {
   store.state.showFooter = true;
   store.state.layout = "default";
   body.classList.add("bg-gray-100");
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 });
 
 onMounted(async () => {
@@ -55,16 +62,52 @@ onMounted(async () => {
     if (packagesList.value.length) {
       selectedId.value = String(packagesList.value[0].id);
     }
+
+    // Si ya existe un pedido de activación pendiente, bloquear confirmaciones repetidas.
+    const ord = await fetchOrders({ estado: "pendiente_pago", tipo: "paquete", per_page: 5 }).catch(() => null);
+    const rows = ord?.data || [];
+    if (rows.length) {
+      hasPendingActivation.value = true;
+      pendingOrderId.value = rows[0]?.id ?? null;
+      infoMsg.value =
+        "Ya tienes una activación pendiente de validación por Administración. No vuelvas a confirmar el pago reiteradamente.";
+    }
   } catch {
     err.value = "No se pudieron cargar los paquetes. Intenta más tarde.";
   } finally {
     loading.value = false;
   }
+
+  // Poll de perfil: cuando el admin confirma, activation_paid_at se setea y el usuario queda liberado.
+  pollTimer = setInterval(async () => {
+    if (!localStorage.getItem("token")) return;
+    try {
+      const u = await fetchProfile();
+      await store.dispatch("auth/setAuth", {
+        user: u,
+        token: localStorage.getItem("token"),
+      });
+      if (!u?.needs_activation_subscription) {
+        if (u?.needs_binary_placement) {
+          router.push("/activacion-binaria");
+        } else {
+          router.push("/dashboard-default");
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, 12000);
 });
 
 async function confirmarActivacion() {
   err.value = "";
   infoMsg.value = "";
+  if (hasPendingActivation.value) {
+    infoMsg.value =
+      "Tienes una activación pendiente de validación por Administración. Espera la confirmación para continuar.";
+    return;
+  }
   if (!selectedId.value) {
     err.value = "Selecciona un paquete.";
     return;
@@ -83,8 +126,10 @@ async function confirmarActivacion() {
       token: localStorage.getItem("token"),
     });
     if (order?.estado === "pendiente_pago") {
+      hasPendingActivation.value = true;
+      pendingOrderId.value = order?.id ?? null;
       infoMsg.value =
-        "Pedido registrado como pendiente de pago. Cuando la empresa confirme (efectivo, QR, transferencia), se activará tu cuenta.";
+        "Pedido registrado como pendiente de pago. Debes ir a Administración para validar/confirmar tu transacción. Evita confirmar reiteradamente.";
       return;
     }
     if (u.needs_binary_placement) {
@@ -93,7 +138,14 @@ async function confirmarActivacion() {
       router.push("/dashboard-default");
     }
   } catch (e) {
-    err.value = e.response?.data?.message || "No se pudo registrar el pedido.";
+    if (e.response?.status === 409) {
+      hasPendingActivation.value = true;
+      infoMsg.value =
+        e.response?.data?.message ||
+        "Ya existe una activación pendiente de confirmación por Administración. Evita confirmar reiteradamente.";
+    } else {
+      err.value = e.response?.data?.message || "No se pudo registrar el pedido.";
+    }
   } finally {
     checkoutLoading.value = false;
   }
@@ -151,11 +203,15 @@ async function confirmarActivacion() {
                 color="success"
                 variant="gradient"
                 class="w-100"
-                :disabled="checkoutLoading || !packagesList.length"
+                :disabled="checkoutLoading || !packagesList.length || hasPendingActivation"
                 @click="confirmarActivacion"
               >
-                {{ checkoutLoading ? "Procesando…" : "Confirmar pedido y activar" }}
+                <template v-if="hasPendingActivation">Activación pendiente (Admin)</template>
+                <template v-else>{{ checkoutLoading ? "Procesando…" : "Confirmar pedido y activar" }}</template>
               </argon-button>
+              <p v-if="hasPendingActivation" class="text-xs text-secondary mt-2 mb-0">
+                Pedido pendiente: <strong>{{ pendingOrderId || "—" }}</strong>. Cuando administración confirme, se habilitará tu panel automáticamente.
+              </p>
             </template>
           </div>
         </div>

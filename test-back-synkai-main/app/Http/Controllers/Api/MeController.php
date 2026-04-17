@@ -7,22 +7,43 @@ use App\Models\BinaryLegVolumeWeekly;
 use App\Models\BinaryPlacement;
 use App\Models\BinaryWeeklyCarry;
 use App\Models\CommissionEvent;
+use App\Models\Rank;
 use App\Models\User;
 use App\Services\BinaryService;
+use App\Services\CareerRankService;
 use App\Services\MlmBonusProgressService;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
-    public function profile(Request $request)
+    public function profile(Request $request, CareerRankService $careerRankService)
     {
-        return response()->json(
-            $request->user()->loadMissing('rank', 'sponsor', 'registrationPackage')
-        );
+        /** @var User $user */
+        $user = $request->user()->loadMissing('rank', 'sponsor', 'registrationPackage', 'referrals.rank');
+
+        $computedSlug = $careerRankService->computeHighestEligibleRankSlug($user);
+        $computedRank = Rank::query()->where('slug', $computedSlug)->first();
+        $computedName = $computedRank?->name ?? $computedSlug;
+
+        $payload = $user->toArray();
+        $payload['computed_rank'] = [
+            'slug' => $computedSlug,
+            'name' => $computedName,
+        ];
+        // Conveniencia para el front (compatibilidad con `rank_name`).
+        $payload['rank_name'] = $computedName;
+
+        return response()->json($payload);
     }
 
-    public function dashboard(Request $request, WalletService $walletService, BinaryService $binaryService, MlmBonusProgressService $bonusProgress)
+    public function dashboard(
+        Request $request,
+        WalletService $walletService,
+        BinaryService $binaryService,
+        MlmBonusProgressService $bonusProgress,
+        CareerRankService $careerRankService
+    )
     {
         /** @var User $user */
         $user = $request->user()->loadMissing('rank', 'sponsor');
@@ -53,6 +74,10 @@ class MeController extends Controller
             ->where('beneficiary_user_id', $user->id)
             ->sum('amount');
 
+        $computedSlug = $careerRankService->computeHighestEligibleRankSlug($user->loadMissing('registrationPackage', 'referrals.rank'));
+        $computedRank = Rank::query()->where('slug', $computedSlug)->first();
+        $computedName = $computedRank?->name ?? $computedSlug;
+
         return response()->json([
             'commissions_total' => $commissionsTotal,
             'bonus_progress' => $bonusProgress->resumen($user),
@@ -68,8 +93,14 @@ class MeController extends Controller
                 'is_mlm_qualified' => $user->is_mlm_qualified,
                 'monthly_qualifying_pv' => $user->monthly_qualifying_pv,
                 'account_status' => $user->account_status,
+                'rank_name' => $computedName,
             ],
-            'rank' => $user->rank ? ['id' => $user->rank->id, 'name' => $user->rank->name, 'slug' => $user->rank->slug] : null,
+            // Rango “vigente” calculado por reglas (no depende solo de rank_id).
+            'rank' => [
+                'id' => $computedRank?->id,
+                'name' => $computedName,
+                'slug' => $computedSlug,
+            ],
             'sponsor' => $user->sponsor ? [
                 'name' => $user->sponsor->name,
                 'referral_code' => $user->sponsor->referral_code,
@@ -106,6 +137,7 @@ class MeController extends Controller
                 'email' => $u->email,
                 'referral_code' => $u->referral_code,
                 'member_code' => $u->member_code,
+                'preferred_binary_leg' => $u->preferred_binary_leg,
                 'pierna' => $leg,
                 'fecha_alta' => $u->created_at?->format('d/m/Y'),
                 'joined_at' => $u->created_at?->toIso8601String(),
@@ -129,6 +161,77 @@ class MeController extends Controller
                 'izquierda' => $izq,
                 'derecha' => $der,
             ],
+        ]);
+    }
+
+    /**
+     * Árbol UNILEVEL hasta N generaciones (por sponsor_id).
+     * Retorna niveles (1..depth) y una estructura children_by_sponsor para render.
+     */
+    public function unilevelTree(Request $request)
+    {
+        /** @var User $me */
+        $me = $request->user();
+
+        $depth = (int) ($request->query('depth', 3));
+        if ($depth < 1) {
+            $depth = 1;
+        }
+        if ($depth > 6) {
+            $depth = 6; // límite defensivo
+        }
+
+        $levels = [];
+        $childrenBySponsor = [];
+
+        $currentSponsorIds = [$me->id];
+
+        for ($gen = 1; $gen <= $depth; $gen++) {
+            $rows = User::query()
+                ->whereIn('sponsor_id', $currentSponsorIds)
+                ->with(['rank:id,name,slug'])
+                ->orderBy('created_at')
+                ->get();
+
+            $items = $rows->map(function (User $u) {
+                return [
+                    'id' => $u->id,
+                    'sponsor_id' => $u->sponsor_id,
+                    'name' => $u->name,
+                    'member_code' => $u->member_code,
+                    'joined_at' => $u->created_at?->toIso8601String(),
+                    'fecha_alta' => $u->created_at?->format('d/m/Y'),
+                    'monthly_qualifying_pv' => $u->monthly_qualifying_pv,
+                    'account_status' => $u->account_status,
+                    'rank_name' => $u->rank?->name ?? '—',
+                ];
+            })->values();
+
+            $levels[(string) $gen] = $items;
+
+            foreach ($items as $it) {
+                $sid = (string) ($it['sponsor_id'] ?? 0);
+                if (! isset($childrenBySponsor[$sid])) {
+                    $childrenBySponsor[$sid] = [];
+                }
+                $childrenBySponsor[$sid][] = $it;
+            }
+
+            $currentSponsorIds = $rows->pluck('id')->all();
+            if (empty($currentSponsorIds)) {
+                break;
+            }
+        }
+
+        return response()->json([
+            'depth' => $depth,
+            'root' => [
+                'id' => $me->id,
+                'name' => $me->name,
+                'member_code' => $me->member_code,
+            ],
+            'levels' => $levels,
+            'children_by_sponsor' => $childrenBySponsor,
         ]);
     }
 
@@ -280,6 +383,7 @@ class MeController extends Controller
     public function commissions(Request $request)
     {
         $userId = $request->user()->id;
+        $bobPerPv = (string) config('mlm.pv_value.bob_per_pv', '7');
 
         $total = (string) CommissionEvent::query()
             ->where('beneficiary_user_id', $userId)
@@ -301,6 +405,20 @@ class MeController extends Controller
             ->limit(100)
             ->get()
             ->map(function (CommissionEvent $e) {
+                $bobPerPv = (string) config('mlm.pv_value.bob_per_pv', '7');
+                $meta = is_array($e->meta) ? $e->meta : [];
+                $pv = null;
+                if (isset($meta['pv_comision_nivel'])) {
+                    $pv = (string) $meta['pv_comision_nivel'];
+                } elseif (isset($meta['pv_comision'])) {
+                    $pv = (string) $meta['pv_comision'];
+                } elseif (isset($meta['matched_pv'])) {
+                    $pv = (string) $meta['matched_pv'];
+                } elseif (bccomp((string) $bobPerPv, '0', 2) === 1) {
+                    // PV aproximado si solo tenemos Bs (retrocompat).
+                    $pv = bcdiv((string) $e->amount, (string) $bobPerPv, 4);
+                }
+
                 return [
                     'id' => $e->id,
                     'type' => $e->type,
@@ -309,13 +427,17 @@ class MeController extends Controller
                         'binary' => 'Bono binario',
                         'residual' => 'Residual',
                         'leadership' => 'Liderazgo',
+                        'venta_directa' => 'Bono venta directa',
                         default => strtoupper($e->type),
                     },
-                    'amount' => $e->amount,
+                    'amount_bob' => (string) $e->amount,
+                    'pv_amount' => $pv,
+                    'bob_per_pv' => $meta['bob_per_pv'] ?? $bobPerPv,
                     'currency' => $e->currency,
                     'level' => $e->level,
                     'period_key' => $e->period_key,
                     'created_at' => $e->created_at?->toIso8601String(),
+                    'period_display' => $e->created_at ? $e->created_at->format('d/m/y') : null,
                     'status' => $e->commission?->status ?? 'accrued',
                 ];
             });
@@ -323,6 +445,11 @@ class MeController extends Controller
         return response()->json([
             'summary' => [
                 'total_accrued' => $total,
+            ],
+            'exchange' => [
+                'label' => 'Tipo de cambio interno',
+                'note' => '1 PV = 7 Bs',
+                'bob_per_pv' => $bobPerPv,
             ],
             'bir_by_level' => $birByLevel,
             'bir_percentages' => config('mlm.bir.schedule', []),

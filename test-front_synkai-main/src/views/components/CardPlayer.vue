@@ -1,47 +1,38 @@
 <template>
-  <div
-    class="card card-background card-background-mask-primary move-on-hover align-items-start"
-  >
-    <div class="cursor-pointer">
-      <div
-        class="full-background"
-        style="
-          background-image: url(&quot;https://images.unsplash.com/photo-1518609878373-06d740f60d8b?ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&ixlib=rb-1.2.1&auto=format&fit=crop&w=2370&q=80&quot;);
-        "
-      ></div>
-      <div class="card-body">
-        <h5 class="mb-0 text-white">Some Kind Of Blues</h5>
-        <p class="text-sm text-white">Deftones</p>
-        <div class="mt-5 d-flex">
-          <button
-            class="p-2 mb-0 btn btn-outline-white rounded-circle"
-            type="button"
-            data-bs-toggle="tooltip"
-            data-bs-placement="top"
-            title="Prev"
-          >
-            <i class="p-2 fas fa-backward"></i>
-          </button>
-          <button
-            class="p-2 mx-2 mb-0 btn btn-outline-white rounded-circle"
-            type="button"
-            data-bs-toggle="tooltip"
-            data-bs-placement="top"
-            title="Pause"
-          >
-            <i class="p-2 fas fa-play"></i>
-          </button>
-          <button
-            class="p-2 mb-0 btn btn-outline-white rounded-circle"
-            type="button"
-            data-bs-toggle="tooltip"
-            data-bs-placement="top"
-            title="Next"
-          >
-            <i class="p-2 fas fa-forward"></i>
-          </button>
+  <div class="card mt-4 move-on-hover">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <h6 class="mb-1">Player</h6>
+          <p class="text-sm text-muted mb-0">Widget demo (archivo recuperado).</p>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-success mb-0" @click="toggle">
+          {{ playing ? "Pausar" : "Reproducir" }}
+        </button>
+      </div>
+      <div class="mt-3">
+        <div class="progress" style="height: 8px">
+          <div class="progress-bar bg-gradient-success" role="progressbar" :style="{ width: progress + '%' }" />
+        </div>
+        <div class="d-flex justify-content-between text-xs text-muted mt-2">
+          <span>{{ playing ? "Reproduciendo…" : "En pausa" }}</span>
+          <span>{{ progress }}%</span>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<script>
+export default {
+  name: "CardPlayer",
+  data() {
+    return { playing: false, progress: 35 };
+  },
+  methods: {
+    toggle() {
+      this.playing = !this.playing;
+    },
+  },
+};
+</script>

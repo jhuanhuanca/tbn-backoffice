@@ -61,9 +61,12 @@ const progressRank = computed(() => dashboard.value?.bonus_progress?.progress_ba
 
 const progressAutoOkm = computed(() => dashboard.value?.bonus_progress?.progress_bars?.auto_okm ?? null);
 
-const progressPlataWindow = computed(
-  () => dashboard.value?.bonus_progress?.progress_bars?.plata_window ?? null,
-);
+const progressPlataWindow = computed(() => {
+  const p = dashboard.value?.bonus_progress?.progress_bars?.plata_window ?? null;
+  if (!p) return null;
+  if (p.show === false) return null;
+  return p;
+});
 
 const user = computed(() => store.state.auth.user);
 
@@ -100,7 +103,12 @@ const kpis = computed(() => {
   const w = d?.wallet?.available;
   const bw = d?.binary_week;
   const rc = d?.referrals_direct_count ?? 0;
-  const rankName = d?.rank?.name || user.value?.rank?.name || "—";
+  const rankName =
+    d?.rank?.name ||
+    d?.user?.rank_name ||
+    user.value?.rank?.name ||
+    user.value?.rank_name ||
+    "—";
   const act =
     d?.user?.is_mlm_qualified || user.value?.is_mlm_qualified ? "Calificado" : "Pendiente";
 
@@ -117,6 +125,19 @@ const kpis = computed(() => {
     activityStatus: act,
     monthlyPvDisplay: loading.value ? "…" : formatPv(pvRaw),
   };
+});
+
+const rankIcon = computed(() => {
+  const name = String(kpis.value.currentRank || "").toLowerCase();
+  if (!name || name === "—") return "ni ni-single-02";
+  if (name.includes("bronce")) return "ni ni-medal-2";
+  if (name.includes("plata")) return "ni ni-diamond";
+  if (name.includes("oro")) return "ni ni-trophy";
+  if (name.includes("platino")) return "ni ni-diamond";
+  if (name.includes("zafiro")) return "ni ni-world-2";
+  if (name.includes("rubí") || name.includes("rubi")) return "ni ni-spaceship";
+  if (name.includes("diamante")) return "ni ni-diamond";
+  return "ni ni-badge";
 });
 
 const binaryLegs = computed(() => {
@@ -342,7 +363,7 @@ onMounted(async () => {
         </h6>
         <p class="text-sm mb-1">{{ progressRank.label }}</p>
         <p class="text-xs text-muted mb-1">{{ progressRank.subtitle }}</p>
-        <div class="progress mb-4" style="height: 12px">
+        <div class="progress mb-4 position-relative" style="height: 12px">
           <div
             class="progress-bar bg-gradient-success"
             role="progressbar"
@@ -351,6 +372,7 @@ onMounted(async () => {
             aria-valuemin="0"
             aria-valuemax="100"
           />
+          <span class="progress-label text-xxs">{{ Math.round(progressRank.percent || 0) }}%</span>
         </div>
         <p class="text-sm mb-1">{{ progressAutoOkm.label }}</p>
         <p class="text-xs text-muted mb-1">
@@ -359,7 +381,7 @@ onMounted(async () => {
           (comisiones en BOB: {{ formatBs(progressAutoOkm.earned_bob) }} · tipo
           {{ progressAutoOkm.bob_per_usd }} BOB/USD)
         </p>
-        <div class="progress mb-0" style="height: 12px">
+        <div class="progress mb-0 position-relative" style="height: 12px">
           <div
             class="progress-bar bg-gradient-warning"
             role="progressbar"
@@ -368,16 +390,18 @@ onMounted(async () => {
             aria-valuemin="0"
             aria-valuemax="100"
           />
+          <span class="progress-label text-xxs">{{ Math.round(progressAutoOkm.percent || 0) }}%</span>
         </div>
         <template v-if="plataBanner?.show && progressPlataWindow">
           <p class="text-sm mb-1 mt-4">{{ progressPlataWindow.label }}</p>
           <p class="text-xs text-muted mb-1">{{ progressPlataWindow.subtitle }}</p>
-          <div class="progress" style="height: 10px">
+          <div class="progress position-relative" style="height: 10px">
             <div
               class="progress-bar bg-gradient-info"
               role="progressbar"
               :style="{ width: Math.min(100, progressPlataWindow.percent || 0) + '%' }"
             />
+            <span class="progress-label text-xxs">{{ Math.round(progressPlataWindow.percent || 0) }}%</span>
           </div>
         </template>
       </div>
@@ -427,7 +451,7 @@ onMounted(async () => {
               :value="kpis.currentRank"
               description="<span class='text-sm font-weight-bolder text-info'>Plan</span> activo"
               :icon="{
-                component: 'ni ni-badge',
+                component: rankIcon,
                 background: 'bg-gradient-warning',
                 shape: 'rounded-circle',
               }"
@@ -646,5 +670,18 @@ onMounted(async () => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+.text-xxs {
+  font-size: 0.65rem;
+}
+.progress-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 </style>

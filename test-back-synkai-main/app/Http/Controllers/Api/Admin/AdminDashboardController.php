@@ -6,13 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\BinaryLegVolumeWeekly;
 use App\Models\CommissionEvent;
 use App\Models\Order;
+use App\Models\Rank;
 use App\Models\User;
 use App\Models\Withdrawal;
+use App\Services\CareerRankService;
 use Illuminate\Support\Facades\DB;
 
 class AdminDashboardController extends Controller
 {
-    public function index()
+    public function index(CareerRankService $careerRankService)
     {
         $pendingWithdrawals = Withdrawal::query()->where('estado', Withdrawal::ESTADO_PENDIENTE)->count();
 
@@ -58,32 +60,60 @@ class AdminDashboardController extends Controller
             ->map(fn ($v) => (string) $v)
             ->all();
 
-        $rankDistribution = User::query()
-            ->select(['ranks.name', 'ranks.slug', DB::raw('COUNT(users.id) as total')])
-            ->leftJoin('ranks', 'users.rank_id', '=', 'ranks.id')
-            ->groupBy('ranks.id', 'ranks.name', 'ranks.slug')
-            ->orderByDesc('total')
-            ->get()
-            ->map(fn ($r) => [
-                'slug' => $r->slug ?? 'sin_rango',
-                'name' => $r->name ?? 'Sin rango',
-                'total' => (int) $r->total,
-            ])
-            ->values()
-            ->all();
+        // Distribución de rangos "reales" por PV de grupo ligero (sin consultas por usuario).
+        $thresholds = (array) config('mlm.residual.rank_thresholds_pv', []);
+        arsort($thresholds); // mayor → menor
+        $rankNamesBySlug = Rank::query()->pluck('name', 'slug')->all();
+        $dist = [];
+
+        User::query()
+            ->where(function ($w) {
+                $w->whereNull('account_type')->orWhere('account_type', 'member');
+            })
+            ->where('mlm_role', 'member')
+            ->whereNotIn('mlm_role', config('mlm.admin_roles', ['admin', 'superadmin', 'support']))
+            ->with(['referrals:id,sponsor_id,monthly_qualifying_pv', 'registrationPackage:id,pv_points'])
+            ->select(['id', 'monthly_qualifying_pv', 'registration_package_id'])
+            ->chunk(400, function ($users) use (&$dist, $thresholds, $rankNamesBySlug) {
+                foreach ($users as $u) {
+                    $gv = (string) (bcadd((string) ($u->monthly_qualifying_pv ?? '0'), '0', 2));
+                    foreach ($u->referrals as $r) {
+                        $gv = bcadd($gv, (string) ($r->monthly_qualifying_pv ?? '0'), 2);
+                    }
+                    $slug = 'activo';
+                    foreach ($thresholds as $s => $min) {
+                        if (bccomp($gv, (string) $min, 2) >= 0) {
+                            $slug = (string) $s;
+                            break;
+                        }
+                    }
+                    $name = $rankNamesBySlug[$slug] ?? ucfirst(str_replace('_', ' ', $slug));
+                    $dist[$slug] = $dist[$slug] ?? ['slug' => $slug, 'name' => $name, 'total' => 0];
+                    $dist[$slug]['total']++;
+                }
+            });
+
+        $rankDistribution = array_values($dist);
+        usort($rankDistribution, fn ($a, $b) => ($b['total'] ?? 0) <=> ($a['total'] ?? 0));
 
         $topMembers = User::query()
-            ->with(['rank:id,name'])
+            ->with(['rank:id,name,slug', 'registrationPackage:id,pv_points', 'referrals.rank:id,sort_order,slug', 'referrals:id,sponsor_id'])
             ->orderByDesc('monthly_qualifying_pv')
             ->limit(10)
             ->get(['id', 'name', 'member_code', 'monthly_qualifying_pv', 'rank_id'])
-            ->map(fn (User $u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-                'member_code' => $u->member_code,
-                'monthly_qualifying_pv' => (string) ($u->monthly_qualifying_pv ?? '0'),
-                'rank_name' => $u->rank?->name ?? '—',
-            ])
+            ->map(function (User $u) use ($careerRankService, $rankNamesBySlug) {
+                $slug = $careerRankService->computeHighestEligibleRankSlug($u);
+                $rankName = $rankNamesBySlug[$slug] ?? ($u->rank?->name ?? '—');
+
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'member_code' => $u->member_code,
+                    'monthly_qualifying_pv' => (string) ($u->monthly_qualifying_pv ?? '0'),
+                    'rank_name' => $rankName,
+                    'rank_slug' => $slug,
+                ];
+            })
             ->values()
             ->all();
 

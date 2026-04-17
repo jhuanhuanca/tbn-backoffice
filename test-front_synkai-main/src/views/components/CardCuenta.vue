@@ -38,6 +38,7 @@
                 <div class="fw-semibold text-dark">{{ perfil.nombre || "—" }}</div>
                 <div class="text-xs text-muted text-truncate">{{ perfil.email }}</div>
                 <div v-if="perfil.member_code" class="text-xxs text-success mt-1">Código: {{ perfil.member_code }}</div>
+                <div v-if="perfil.rango" class="text-xxs text-warning mt-1">Rango: {{ perfil.rango }}</div>
                 <div v-if="perfil.country_label" class="text-xxs text-muted">{{ perfil.country_label }}</div>
               </div>
             </div>
@@ -452,7 +453,15 @@
 </template>
 
 <script>
-import { fetchProfile } from "@/services/me";
+import {
+  fetchProfile,
+  updateMyProfile,
+  changeMyPassword,
+  fetchWalletSettings,
+  updateWalletSettings,
+  fetchSupportTickets,
+  createSupportTicket,
+} from "@/services/me";
 import { labelCountry } from "@/constants/latamCountries";
 
 const LATAM_MONEDAS = [
@@ -487,6 +496,7 @@ export default {
         telefono: "",
         bio: "",
         member_code: "",
+        rango: "",
         country_label: "",
       },
       perfilInitial: null,
@@ -573,6 +583,8 @@ export default {
   },
   async mounted() {
     await this.loadProfileFromApi();
+    await this.loadWalletSettings();
+    await this.loadTickets();
   },
   methods: {
     labelCountry,
@@ -580,6 +592,11 @@ export default {
       if (!localStorage.getItem("token")) return;
       try {
         const u = await fetchProfile();
+        const rango =
+          u.rank_name ||
+          u.computed_rank?.name ||
+          u.rank?.name ||
+          "";
         this.perfil = {
           nombre: u.name || "",
           username: (u.email && u.email.split("@")[0]) || "",
@@ -587,25 +604,50 @@ export default {
           telefono: u.phone || "",
           bio: this.perfil.bio || "",
           member_code: u.member_code != null ? String(u.member_code) : "",
+          rango: rango ? String(rango) : "",
           country_label: labelCountry(u.country_code),
         };
         this.perfilInitial = JSON.parse(JSON.stringify(this.perfil));
-        const uid = u.id;
-        if (uid) {
-          try {
-            const raw = localStorage.getItem(`wallet_prefs_${uid}`);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              this.wallet = { ...this.wallet, ...parsed };
-              this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
-            }
-          } catch {
-            /* ignore */
-          }
-        }
         this.lastUpdated = this.nowLabel();
       } catch {
         /* sesión inválida */
+      }
+    },
+    async loadWalletSettings() {
+      if (!localStorage.getItem("token")) return;
+      try {
+        const r = await fetchWalletSettings();
+        const s = r.wallet_settings || null;
+        if (s) {
+          this.wallet = {
+            metodo: s.method || this.wallet.metodo,
+            moneda: s.currency || this.wallet.moneda,
+            direccion: s.address || "",
+            banco: s.bank || "",
+            titular: s.holder || "",
+            cuenta: s.account || "",
+            swift: s.swift || "",
+          };
+        }
+        this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
+      } catch {
+        /* ignore */
+      }
+    },
+    async loadTickets() {
+      if (!localStorage.getItem("token")) return;
+      try {
+        const r = await fetchSupportTickets();
+        this.tickets = (r.items || []).map((t) => ({
+          id: t.id,
+          codigo: t.code,
+          asunto: t.subject,
+          categoria: t.category,
+          fecha: t.created_at ? new Date(t.created_at).toLocaleDateString("es-BO") : "—",
+          estado: t.status,
+        }));
+      } catch {
+        this.tickets = [];
       }
     },
     nowLabel() {
@@ -635,21 +677,43 @@ export default {
       this.lastUpdated = this.nowLabel();
     },
     // Perfil
-    savePerfil() {
-      this.perfilInitial = JSON.parse(JSON.stringify(this.perfil));
-      this.lastUpdated = this.nowLabel();
+    async savePerfil() {
+      try {
+        const r = await updateMyProfile({
+          name: this.perfil.nombre,
+          phone: this.perfil.telefono,
+        });
+        const u = r.user || null;
+        if (u) {
+          this.perfil.nombre = u.name || this.perfil.nombre;
+          this.perfil.telefono = u.phone || this.perfil.telefono;
+        }
+        this.perfilInitial = JSON.parse(JSON.stringify(this.perfil));
+        this.lastUpdated = this.nowLabel();
+      } catch {
+        /* ignore */
+      }
     },
     resetPerfil() {
       this.perfil = JSON.parse(JSON.stringify(this.perfilInitial || this.perfil));
       this.lastUpdated = this.nowLabel();
     },
     // Password
-    savePassword() {
+    async savePassword() {
       if (!this.canSavePassword) return;
-      this.password.actual = "";
-      this.password.nueva = "";
-      this.password.confirmar = "";
-      this.lastUpdated = this.nowLabel();
+      try {
+        await changeMyPassword({
+          current_password: this.password.actual,
+          password: this.password.nueva,
+          password_confirmation: this.password.confirmar,
+        });
+        this.password.actual = "";
+        this.password.nueva = "";
+        this.password.confirmar = "";
+        this.lastUpdated = this.nowLabel();
+      } catch {
+        /* ignore */
+      }
     },
     resetPassword() {
       this.password.actual = "";
@@ -658,17 +722,24 @@ export default {
       this.lastUpdated = this.nowLabel();
     },
     // Wallet
-    saveWallet() {
-      this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
-      const uid = this.$store.state.auth.user?.id;
-      if (uid) {
-        try {
-          localStorage.setItem(`wallet_prefs_${uid}`, JSON.stringify(this.wallet));
-        } catch {
-          /* */
-        }
+    async saveWallet() {
+      try {
+        await updateWalletSettings({
+          wallet_settings: {
+            method: this.wallet.metodo,
+            currency: this.wallet.moneda,
+            address: this.wallet.direccion,
+            bank: this.wallet.banco,
+            holder: this.wallet.titular,
+            account: this.wallet.cuenta,
+            swift: this.wallet.swift,
+          },
+        });
+        this.walletInitial = JSON.parse(JSON.stringify(this.wallet));
+        this.lastUpdated = this.nowLabel();
+      } catch {
+        /* ignore */
       }
-      this.lastUpdated = this.nowLabel();
     },
     resetWallet() {
       this.wallet = JSON.parse(JSON.stringify(this.walletInitial || this.wallet));
@@ -694,22 +765,36 @@ export default {
     },
     createTicket() {
       if (!this.canCreateTicket) return;
-      const id = Date.now();
-      const codigo = `SUP-${String(Math.floor(1000 + Math.random() * 9000))}`;
-      this.tickets = [
-        {
-          id,
-          codigo,
-          asunto: this.ticketDraft.asunto,
-          categoria: this.ticketDraft.categoria,
-          fecha: new Date().toLocaleDateString("es-ES", { month: "short", day: "2-digit" }),
-          estado: "Abierto",
-        },
-        ...this.tickets,
-      ];
-      this.resetTicketDraft();
-      this.newTicketOpen = false;
-      this.lastUpdated = this.nowLabel();
+      this.createTicketApi();
+    },
+    async createTicketApi() {
+      try {
+        const r = await createSupportTicket({
+          subject: this.ticketDraft.asunto,
+          category: this.ticketDraft.categoria,
+          priority: this.ticketDraft.prioridad,
+          message: this.ticketDraft.mensaje,
+        });
+        const t = r.ticket;
+        if (t) {
+          this.tickets = [
+            {
+              id: t.id,
+              codigo: t.code,
+              asunto: t.subject,
+              categoria: t.category,
+              fecha: t.created_at ? new Date(t.created_at).toLocaleDateString("es-BO") : this.nowLabel(),
+              estado: t.status,
+            },
+            ...this.tickets,
+          ];
+        }
+        this.resetTicketDraft();
+        this.newTicketOpen = false;
+        this.lastUpdated = this.nowLabel();
+      } catch {
+        /* ignore */
+      }
     },
     ticketBadge(estado) {
       const e = String(estado || "").toLowerCase();
@@ -719,9 +804,6 @@ export default {
       return "bg-secondary text-white";
     },
     goToMiLanding() {
-      try {
-        sessionStorage.setItem("landingPerfil", JSON.stringify(this.perfil));
-      } catch (_) { /* storage no disponible */ }
       this.$router.push("/mi-landing");
     },
   },
