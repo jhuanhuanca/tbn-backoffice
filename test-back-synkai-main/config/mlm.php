@@ -76,6 +76,24 @@ return [
         'matched_pv_commission_rate' => (string) env('MLM_BINARY_MATCHED_RATE', '0.21'),
         'cache_ttl_seconds' => (int) env('MLM_BINARY_CACHE_TTL', 600),
         'cache_prefix' => 'mlm:binary:',
+        /**
+         * Modo híbrido diario (B): bono diario, cap semanal y penalización mensual del acumulado no pagado.
+         * - Se calcula daily_bonus = matchedPV(día) × rate
+         * - Se paga semanalmente con cap (BOB)
+         * - Lo no pagado recibe penalización mensual (porcentaje)
+         */
+        'hybrid_daily' => [
+            'enabled' => filter_var(env('MLM_BINARY_HYBRID_DAILY', true), FILTER_VALIDATE_BOOL),
+            'rate' => (string) env('MLM_BINARY_HYBRID_RATE', '0.21'),
+            /**
+             * Tope semanal del pago binario.
+             * Si defines weekly_cap_usd, el sistema lo convierte a BOB usando mlm.auto_okm.bob_per_usd (por defecto 6.96; recomendado 7).
+             * Puedes sobreescribir directamente en BOB con weekly_cap_bob.
+             */
+            'weekly_cap_usd' => (string) env('MLM_BINARY_HYBRID_WEEKLY_CAP_USD', '2500'),
+            'weekly_cap_bob' => (string) env('MLM_BINARY_HYBRID_WEEKLY_CAP_BOB', ''),
+            'month_penalty' => (string) env('MLM_BINARY_HYBRID_MONTH_PENALTY', '0.10'),
+        ],
         /** Tope de pago binario acumulado por periodo (solo aplica a eventos con meta.cap_period_key). */
         'cap' => [
             'enabled' => filter_var(env('MLM_BINARY_CAP_ENABLED', false), FILTER_VALIDATE_BOOL),
@@ -295,6 +313,14 @@ return [
     'leadership' => [
         'default_rate' => 0.10,
         'consecutive_months_required' => 3,
+        /**
+         * PV requerido por mes (equipo) para habilitar liderazgo, por slug de rango.
+         * Si no está definido, se intenta usar `mlm.career.requirements.<slug>.min_group_pv_light`.
+         */
+        'required_pv_by_rank_slug' => [
+            // ejemplo:
+            // 'plata' => 3600,
+        ],
     ],
 
     'queues' => [

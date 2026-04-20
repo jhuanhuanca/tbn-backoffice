@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\BinaryLegVolumeWeekly;
+use App\Models\BinaryLegVolumeDaily;
 use App\Models\BinaryPlacement;
 use App\Models\BinaryWeeklyCarry;
 use App\Models\Order;
 use App\Models\OrderBinaryVolumeApplied;
+use App\Models\OrderBinaryVolumeAppliedDaily;
 use App\Models\PeriodClosure;
 use App\Models\User;
 use Carbon\Carbon;
@@ -112,14 +114,19 @@ class BinaryService
             ? $this->volumePeriodKey(Carbon::parse($order->completed_at))
             : $this->volumePeriodKey(now());
 
+        $dayKey = $order->completed_at
+            ? Carbon::parse($order->completed_at)->toDateString()
+            : now()->toDateString();
+
         $chain = $this->ancestrosBinarioConPierna($order->user_id);
         if ($chain === []) {
             return;
         }
 
-        DB::transaction(function () use ($order, $pv, $periodKey, $chain) {
+        DB::transaction(function () use ($order, $pv, $periodKey, $dayKey, $chain) {
             foreach ($chain as $hop) {
                 $this->incrementarVolumenPierna((int) $hop['user_id'], $periodKey, (string) $hop['leg'], $pv);
+                $this->incrementarVolumenPiernaDiaria((int) $hop['user_id'], $dayKey, (string) $hop['leg'], $pv);
                 $this->olvidarCacheArbol((int) $hop['user_id']);
             }
 
@@ -128,6 +135,15 @@ class BinaryService
                 'week_key' => $periodKey,
                 'applied_at' => now(),
             ]);
+
+            // Para binario híbrido diario: idempotencia diaria.
+            if (! OrderBinaryVolumeAppliedDaily::query()->where('order_id', $order->id)->exists()) {
+                OrderBinaryVolumeAppliedDaily::query()->create([
+                    'order_id' => $order->id,
+                    'day_key' => $dayKey,
+                    'applied_at' => now(),
+                ]);
+            }
         });
 
         $this->olvidarCacheArbol($order->user_id);
@@ -234,6 +250,18 @@ class BinaryService
         ]);
 
         $row->volume_pv = bcadd((string) ($row->volume_pv ?? '0'), $pv, 2);
+        $row->save();
+    }
+
+    protected function incrementarVolumenPiernaDiaria(int $parentUserId, string $dayKey, string $leg, string $pv): void
+    {
+        $row = BinaryLegVolumeDaily::query()->firstOrNew([
+            'parent_user_id' => $parentUserId,
+            'day_key' => $dayKey,
+            'leg_position' => $leg,
+        ]);
+
+        $row->volume_pv = bcadd((string) ($row->volume_pv ?? '0'), $pv, 4);
         $row->save();
     }
 

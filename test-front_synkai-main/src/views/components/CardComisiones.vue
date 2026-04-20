@@ -272,6 +272,7 @@ export default {
       resumen: { total_accrued: "0" },
       birByLevel: { 1: "0", 2: "0", 3: "0" },
       items: [],
+      binaryHybrid: null,
       disponible: "0",
       exchange: null,
       activeTab: "general",
@@ -345,10 +346,39 @@ export default {
         return null;
       }
     },
+    isoMondayFromWeekKey(weekKey) {
+      // weekKey esperado: "YYYY-Www" (ISO week). Retorna fecha ISO del lunes.
+      const m = String(weekKey || "").match(/^(\d{4})-W(\d{2})$/);
+      if (!m) return null;
+      const y = Number(m[1]);
+      const w = Number(m[2]);
+      if (!y || !w) return null;
+
+      // ISO week algorithm: Monday of week 1 is the Monday of the week containing Jan 4.
+      const jan4 = new Date(Date.UTC(y, 0, 4, 12, 0, 0));
+      const day = jan4.getUTCDay() || 7; // 1..7
+      const mondayWeek1 = new Date(jan4);
+      mondayWeek1.setUTCDate(jan4.getUTCDate() - (day - 1));
+
+      const monday = new Date(mondayWeek1);
+      monday.setUTCDate(mondayWeek1.getUTCDate() + (w - 1) * 7);
+
+      const yy = monday.getUTCFullYear();
+      const mm = String(monday.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(monday.getUTCDate()).padStart(2, "0");
+      return `${yy}-${mm}-${dd}`;
+    },
     buildDailyRows(typeKey) {
       const mapType = this.tabTypeMap[typeKey] || null;
       const wanted = mapType?.types || [];
-      const base = Array.isArray(this.items) ? this.items : [];
+      // Importante: para Binario híbrido inyectamos filas informativas en `tabItems`,
+      // así que el listado diario debe agrupar desde esas filas (no solo desde `items`).
+      const base =
+        typeKey === this.activeTab && Array.isArray(this.tabItems)
+          ? this.tabItems
+          : Array.isArray(this.items)
+            ? this.items
+            : [];
       const rows = base.filter((r) => wanted.includes(r.type));
       const byDay = {};
       for (const r of rows) {
@@ -360,7 +390,8 @@ export default {
       }
       const out = [];
       const today = new Date();
-      for (let i = this.dailyDays - 1; i >= 0; i--) {
+      // Orden: primero hoy, luego hacia atrás (hoy, ayer, ...).
+      for (let i = 0; i < this.dailyDays; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() - i);
         const y = d.getFullYear();
@@ -397,6 +428,7 @@ export default {
           3: br[3] ?? br["3"] ?? "0",
         };
         this.items = c.items || [];
+        this.binaryHybrid = c.binary_hybrid || null;
         this.disponible = w.available || "0";
       } catch {
         if (!silent) {
@@ -436,7 +468,7 @@ export default {
         binary: {
           title: "Bono binario",
           help:
-            "Se calcula por cierre del periodo (semanal o mensual): 21% sobre el PV emparejado de la pierna débil (carry al siguiente periodo).",
+            "Modo híbrido (B): cada día se empareja pierna débil (min) con carry; el bono diario se guarda en backend. El pago que ves en comisiones suele ser semanal (un solo evento 'binary' por semana ISO), con tope semanal en BOB (USD×tipo de cambio).",
           types: ["binary"],
         },
         leadership: {
@@ -448,7 +480,7 @@ export default {
         bir: {
           title: "Bono de inicio rápido (BIR)",
           help:
-            "Se genera cuando un directo compra un paquete: 21% línea 1, 15% línea 2, 6% línea 3 (sobre PV comisionable).",
+            "Se acredita en el primer pedido completado del socio con paquete (inscripción): 21% línea 1, 15% línea 2, 6% línea 3 sobre la base configurada (PV o monto comisionable).",
           types: ["bir"],
         },
         residual: {
@@ -469,6 +501,40 @@ export default {
       const mapType = this.tabTypeMap[this.activeTab];
       if (!mapType) return [];
       const wanted = mapType.types || [];
+      // Binario híbrido: mostrar detalle diario (informativo) + pagos semanales (reales).
+      if (this.activeTab === "binary" && this.binaryHybrid?.enabled) {
+        const daily = Array.isArray(this.binaryHybrid.daily) ? this.binaryHybrid.daily : [];
+        const weekly = Array.isArray(this.binaryHybrid.weekly) ? this.binaryHybrid.weekly : [];
+
+        const dailyRows = daily.map((d) => ({
+          id: `binary_daily:${d.day_key}`,
+          type: "binary",
+          type_label: "Bono binario (diario)",
+          amount_bob: d.daily_bonus_bob,
+          pv_amount: d.matched_pv,
+          // Mediodía UTC para evitar que en algunas zonas horarias “cambie de día” al parsear.
+          created_at: `${d.day_key}T12:00:00.000Z`,
+          period_key: d.day_key,
+          period_display: d.day_key,
+          status: "info",
+        }));
+
+        const weeklyRows = weekly.map((w) => ({
+          id: `binary_weekly:${w.week_key}`,
+          type: "binary",
+          type_label: "Bono binario (pago semanal)",
+          amount_bob: w.paid_weekly_bonus_bob,
+          pv_amount: null,
+          created_at: `${this.isoMondayFromWeekKey(w.week_key) || "1970-01-01"}T12:00:00.000Z`,
+          period_key: w.week_key,
+          period_display: w.week_key,
+          status: "accrued",
+        }));
+
+        const merged = [...dailyRows, ...weeklyRows];
+        return merged;
+      }
+
       return (this.items || []).filter((r) => wanted.includes(r.type));
     },
     tabTotals() {

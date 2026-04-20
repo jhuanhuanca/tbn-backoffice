@@ -17,9 +17,14 @@ class CareerRankService
      */
     public function groupQualifyingPvLight(User $user): string
     {
+        // Regla: clientes preferentes NO cuentan para rangos/bonos de red.
+        // Solo sumar directos con account_type member (o null legacy).
         $user->loadMissing('referrals');
         $sum = bcadd((string) ($user->monthly_qualifying_pv ?? '0'), '0', 4);
         foreach ($user->referrals as $r) {
+            if ($r->isPreferredCustomer()) {
+                continue;
+            }
             $sum = bcadd($sum, (string) ($r->monthly_qualifying_pv ?? '0'), 4);
         }
 
@@ -86,6 +91,9 @@ class CareerRankService
             $minPv = (string) config('mlm.career.direct_active_min_pv', '50');
             $n = User::query()
                 ->where('sponsor_id', $user->id)
+                ->where(function ($w) {
+                    $w->whereNull('account_type')->orWhere('account_type', 'member');
+                })
                 ->where('account_status', 'active')
                 ->where('monthly_qualifying_pv', '>=', $minPv)
                 ->count();
@@ -106,6 +114,9 @@ class CareerRankService
             $minSo = (int) ($rankSort[$needSlug] ?? 999999);
             $count = User::query()
                 ->where('sponsor_id', $user->id)
+                ->where(function ($w) {
+                    $w->whereNull('account_type')->orWhere('account_type', 'member');
+                })
                 ->whereHas('rank', fn ($q) => $q->where('sort_order', '>=', $minSo))
                 ->count();
             if ($count < $needCount) {
@@ -249,6 +260,9 @@ class CareerRankService
             $minPv = (string) config('mlm.career.direct_active_min_pv', '50');
             $n = User::query()
                 ->where('sponsor_id', $user->id)
+                ->where(function ($w) {
+                    $w->whereNull('account_type')->orWhere('account_type', 'member');
+                })
                 ->where('account_status', 'active')
                 ->where('monthly_qualifying_pv', '>=', $minPv)
                 ->count();
@@ -269,6 +283,9 @@ class CareerRankService
             $minSo = (int) ($rankSort[$needSlug] ?? 999999);
             $count = User::query()
                 ->where('sponsor_id', $user->id)
+                ->where(function ($w) {
+                    $w->whereNull('account_type')->orWhere('account_type', 'member');
+                })
                 ->whereHas('rank', fn ($q) => $q->where('sort_order', '>=', $minSo))
                 ->count();
             if ($count < $needCount) {

@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\ProductCatalogController;
 use App\Http\Controllers\Api\SponsorLookupController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\WithdrawalController;
+use App\Http\Controllers\Api\MlmBonusCalculatorController;
 use App\Http\Controllers\ProspectosController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -76,6 +77,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders', [OrderController::class, 'store']);
     Route::post('/withdrawals', [WithdrawalController::class, 'store']);
     Route::get('/withdrawals', [WithdrawalController::class, 'index']);
+
+    // Calculadoras (JSON) para integrar fórmulas de bonos.
+    Route::post('/mlm/bonus/calculate', [MlmBonusCalculatorController::class, 'calculate']);
 
     Route::middleware('mlm.admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index']);

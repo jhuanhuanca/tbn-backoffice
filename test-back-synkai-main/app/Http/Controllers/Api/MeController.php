@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BinaryLegVolumeWeekly;
 use App\Models\BinaryPlacement;
+use App\Models\BinaryDailyPayout;
+use App\Models\BinaryWeeklyBonus;
 use App\Models\BinaryWeeklyCarry;
 use App\Models\CommissionEvent;
 use App\Models\Rank;
@@ -442,6 +444,64 @@ class MeController extends Controller
                 ];
             });
 
+        $binaryHybrid = null;
+        if ((bool) config('mlm.binary.hybrid_daily.enabled', false)) {
+            $days = [];
+            for ($i = 0; $i < 14; $i++) {
+                $days[] = now()->subDays($i)->toDateString();
+            }
+
+            $daily = BinaryDailyPayout::query()
+                ->where('user_id', $userId)
+                ->whereIn('day_key', $days)
+                ->orderByDesc('day_key')
+                ->get()
+                ->map(fn (BinaryDailyPayout $p) => [
+                    'day_key' => $p->day_key?->format('Y-m-d') ?? (string) $p->day_key,
+                    'matched_pv' => (string) $p->matched_pv,
+                    'daily_bonus_bob' => (string) $p->daily_bonus_bob,
+                    'rate' => (string) (($p->meta ?? [])['rate'] ?? config('mlm.binary.hybrid_daily.rate', '0.21')),
+                    'bob_per_pv' => (string) (($p->meta ?? [])['bob_per_pv'] ?? $bobPerPv),
+                ])
+                ->values()
+                ->all();
+
+            $weekly = BinaryWeeklyBonus::query()
+                ->where('user_id', $userId)
+                ->orderByDesc('week_key')
+                ->limit(8)
+                ->get()
+                ->map(fn (BinaryWeeklyBonus $w) => [
+                    'week_key' => (string) $w->week_key,
+                    'weekly_bonus_bob' => (string) $w->weekly_bonus_bob,
+                    'paid_weekly_bonus_bob' => (string) $w->paid_weekly_bonus_bob,
+                    'accumulated_unpaid_bob' => (string) $w->accumulated_unpaid_bob,
+                    'final_accumulated_bob' => (string) $w->final_accumulated_bob,
+                    'month_key' => (string) $w->month_key,
+                    'month_penalty_applied' => (bool) $w->month_penalty_applied,
+                    'meta' => $w->meta,
+                ])
+                ->values()
+                ->all();
+
+            $binaryHybrid = [
+                'enabled' => true,
+                'mode' => 'hybrid_daily',
+                'days_window' => 14,
+                'weeks_window' => 8,
+                'daily' => $daily,
+                'weekly' => $weekly,
+                'config' => [
+                    'rate' => (string) config('mlm.binary.hybrid_daily.rate', '0.21'),
+                    'weekly_cap_usd' => (string) config('mlm.binary.hybrid_daily.weekly_cap_usd', '2500'),
+                    'weekly_cap_bob_override' => (string) config('mlm.binary.hybrid_daily.weekly_cap_bob', ''),
+                    'month_penalty' => (string) config('mlm.binary.hybrid_daily.month_penalty', '0.10'),
+                    'bob_per_usd' => (string) config('mlm.auto_okm.bob_per_usd', '7'),
+                    'bob_per_pv' => (string) $bobPerPv,
+                ],
+            ];
+        }
+
         return response()->json([
             'summary' => [
                 'total_accrued' => $total,
@@ -454,6 +514,7 @@ class MeController extends Controller
             'bir_by_level' => $birByLevel,
             'bir_percentages' => config('mlm.bir.schedule', []),
             'items' => $items,
+            'binary_hybrid' => $binaryHybrid,
         ]);
     }
 }

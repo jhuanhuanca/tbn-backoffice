@@ -30,11 +30,21 @@ class UserQualificationService
 
         $was = (bool) $user->is_mlm_qualified;
 
+        // Regla de cuenta:
+        // - No marcar "active" solo por calificación mensual.
+        // - Un socio pasa a "active" al pagar su paquete de activación (activation_paid_at) y verificar correo.
+        $newStatus = $user->account_status;
+        if ($user->activation_paid_at !== null && $user->email_verified_at !== null) {
+            $newStatus = 'active';
+        } elseif ($newStatus === null || $newStatus === '') {
+            $newStatus = 'pending';
+        }
+
         $user->forceFill([
             'last_qualification_month' => $month,
             'monthly_qualifying_pv' => $pv,
             'is_mlm_qualified' => $qualified,
-            'account_status' => 'active',
+            'account_status' => $newStatus,
         ])->save();
 
         $this->rankService->sincronizarRangoPorCalificacion($user->fresh());

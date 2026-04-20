@@ -31,6 +31,15 @@ class CommissionService
             return;
         }
 
+        // Regla: bono inicio rápido solo al inscribirse (primer pedido completado del socio).
+        $completedOrdersCount = Order::query()
+            ->where('user_id', $buyer->id)
+            ->where('estado', 'completado')
+            ->count();
+        if ($completedOrdersCount !== 1) {
+            return;
+        }
+
         $schedule = config('mlm.bir.schedule', []);
         $bobPerPv = (string) config('mlm.pv_value.bob_per_pv', '1');
         $baseMode = config('mlm.bir.base', 'pv');
@@ -268,6 +277,8 @@ class CommissionService
             return;
         }
 
+        // Nota: para binario híbrido diario, el pago semanal se sigue registrando como type=binary por semana,
+        // pero la fuente del cálculo proviene de binary_daily_payouts/binary_weekly_bonus.
         $key = "binary:{$userId}:{$periodKey}";
         $meta = array_merge([
             'matched_pv' => $matchedPv,
@@ -296,12 +307,15 @@ class CommissionService
      */
     public function calcularLiderazgo(User $beneficiary, string $monthKey, string $baseAmount): void
     {
+        // baseAmount: PV requerido/base PV según la fórmula de liderazgo solicitada.
         $rate = (string) ($beneficiary->rank?->leadership_rate ?? config('mlm.leadership.default_rate', 0));
         if (bccomp($rate, '0', 6) !== 1) {
             return;
         }
 
-        $amount = $this->roundMoney(bcmul($baseAmount, $rate, 4));
+        $bobPerPv = (string) config('mlm.pv_value.bob_per_pv', '7');
+        $pvComision = bcadd(bcmul($baseAmount, $rate, 6), '0', 6);
+        $amount = $this->roundMoney(bcmul($pvComision, $bobPerPv, 4));
         if (bccomp($amount, '0', 2) !== 1) {
             return;
         }
@@ -317,7 +331,12 @@ class CommissionService
             order: null,
             periodKey: $monthKey,
             periodType: 'monthly',
-            meta: ['base' => $baseAmount, 'rate' => $rate]
+            meta: [
+                'required_pv' => $baseAmount,
+                'rate' => $rate,
+                'pv_comision' => $pvComision,
+                'bob_per_pv' => $bobPerPv,
+            ]
         );
     }
 

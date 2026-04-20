@@ -21,8 +21,13 @@ Este documento resume **cómo funciona** el núcleo MLM después de la capa de s
 ## 2. Árbol binario
 
 - **Colocación:** `BinaryService::placeUserInFirstFreeSlot` / **`BinaryTreeService::insertarEnArbol`** — BFS bajo el `sponsor_id`: primero izquierda libre, luego derecha; si el patrocinador está lleno, se desciende por niveles.
-- **Propagación de volumen:** `acumularVolumenBinarioPorPedido` recorre la cadena `ancestrosBinarioConPierna` y suma el PV de la orden en `binary_leg_volume_weekly` por semana ISO.
-- **Cierre semanal:** `BinaryService::procesarCierreSemanal` calcula carry de la semana anterior + volumen actual, empareja pierna débil (`min(L,R)`), arrastra el resto a `binary_weekly_carry`.
+- **Propagación de volumen:** `acumularVolumenBinarioPorPedido` recorre la cadena `ancestrosBinarioConPierna` y suma el PV de la orden:
+  - **Legacy (periodos):** `binary_leg_volume_weekly` (semana ISO o mes).
+  - **Híbrido diario (B):** `binary_leg_volume_daily` (YYYY-MM-DD) + carry diario.
+- **Cierre (legacy):** `BinaryService::procesarCierreSemanal` calcula carry de la semana anterior + volumen actual, empareja pierna débil (`min(L,R)`), arrastra el resto a `binary_weekly_carry`.
+- **Cierre (híbrido diario B):** `BinaryHybridDailyService` calcula:
+  - **Diario:** `matchedPV_día = min(leftEff, rightEff)` y guarda `binary_daily_payouts` + `binary_daily_carry` (día siguiente).
+  - **Semanal:** suma `daily_bonus_bob`, aplica **tope semanal** y registra comisión `binary` del periodo ISO.
 
 ### Binario — pago (comisión)
 
@@ -40,6 +45,7 @@ Los metadatos del evento `binary` guardan fórmula y parámetros para auditoría
 - Solo líneas con **paquete** (`package_id`).
 - Por defecto **`mlm.bir.base = pv`**: base = **PV de la línea** (`order_items.pv_points`).
 - Importe en moneda: **`(PV × % nivel) × bob_per_pv`** con niveles **21 % / 15 % / 6 %** sobre patrocinio en cadena (3 niveles).
+- **Regla de negocio:** se paga **solo en la inscripción** (primer pedido completado del socio con paquete).
 - Alternativa: `MLM_BIR_BASE=commissionable_amount` usa el monto comisionable del paquete.
 
 `bob_per_pv` = `config('mlm.pv_value.bob_per_pv')` (p. ej. 9 BOB por PV).
@@ -86,7 +92,13 @@ Ajuste fino de umbrales y slugs debe alinearse con los registros en la tabla `ra
 
 ## 9. Liderazgo (racha 3 meses)
 
-- **`LeadershipStreakService`**: esqueleto + reglas de periodo. La lógica completa de “3 meses consecutivos al mismo nivel” requiere **tabla de histórico mensual** (p. ej. `user_monthly_pv_snapshots`) y acreditación vía `CommissionService::calcularLiderazgo` o un job mensual — ver comentarios en el código.
+- **Snapshots:** `UserQualificationService` persiste `user_monthly_rank_snapshots` con PV de calificación y racha (meses consecutivos mismo rango).
+- **Cálculo/acreditación:** `LeadershipBonusAccrualService` + job mensual `CalculateLeadershipMonthlyBonusesJob`:
+  - teamPV mensual (light) = PV propio del mes + PV de directos del mes (excluye clientes preferentes).
+  - si `teamPV >= requiredPV` y `streak >= N`:
+    - bonusPV = requiredPV × leadershipRate
+    - bonusBOB = bonusPV × bob_per_pv
+  - acredita `commission_events.type = leadership` con `period_type = monthly`.
 
 ---
 

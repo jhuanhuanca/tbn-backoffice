@@ -532,7 +532,7 @@ onMounted(async () => {
                 </select>
               </div>
               <div v-if="paymentSettlement === 'manual'" class="col-12">
-                <label class="form-label text-xs text-muted mb-1">Método de pago (pendiente de confirmación)</label>
+                <label class="form-label text-xs text-muted mb-1">Método de pago</label>
                 <select v-model="paymentMethodOffline" class="form-control form-control-sm mb-2">
                   <option value="efectivo">Efectivo</option>
                   <option value="qr">QR</option>
@@ -549,8 +549,12 @@ onMounted(async () => {
             </div>
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div class="text-sm">
-                <span class="text-secondary">Total:</span>
+                <span class="text-secondary">Total Bs.:</span>
                 <strong class="text-dark ms-1">{{ formatearPrecio(totalPedido) }}</strong>
+              </div>
+               <div class="text-sm">
+                <span class="text-secondary">Total PVs:</span>
+                <strong class="text-dark ms-1">{{ totalPedidoPuntos }}</strong>
               </div>
               <argon-button
                 color="success"
