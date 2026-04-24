@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 import DefaultInfoCard from "@/examples/Cards/DefaultInfoCard.vue";
 import { fetchBinaryTree, fetchReferrals } from "@/services/me";
+import { getEffectiveRankName } from "@/utils/mlm";
 
 const loading = ref(true);
 const error = ref("");
@@ -45,7 +46,7 @@ const directNodes = computed(() =>
     fechaAlta: r.fecha_alta || "—",
     joinedAtMs: r.joined_at ? Date.parse(r.joined_at) : 0,
     pv: Number(r.monthly_qualifying_pv || 0),
-    rank: r.rank_name || "—",
+    rank: getEffectiveRankName(r),
     status: r.account_status || "—",
     prefer: r.preferred_binary_leg || "auto",
     placedLeg: r.pierna || null,

@@ -218,7 +218,7 @@ class MlmBonusProgressService
 
         $windowBar = [
             'percent' => $windowPct,
-            'label' => 'PV comisionables (últimos 90 días) hacia requisito Plata',
+            'label' => 'PV comisionables (últimos 90 días) hacia requisito Acenso hacia paqute fundador',
             'subtitle' => $pv90.' / '.$pvTarget.' PV',
             'pv_90d' => $pv90,
             'pv_target' => $pvTarget,
@@ -281,13 +281,13 @@ class MlmBonusProgressService
         }
 
         $message = 'Debes completar '.$pvTarget.' PV en '.$months.' meses con tus compras; de lo contrario, '
-            .'realiza una sola compra de '.$pvTarget.' PV en productos para ascender al rango Plata. '
-            .'Este aviso desaparece cuando alcances el rango Plata.';
+            .'realiza una sola compra de '.$pvTarget.' PV en productos para ascender al paquete fundador. '
+            .'Este aviso desaparece cuando alcances el paquete fundador.';
 
         return [
             'banner' => [
                 'show' => true,
-                'title' => 'Importante: camino a rango Plata',
+                'title' => 'Importante: camino a paquete fundador',
                 'message' => $message,
                 'pv_target' => $pvTarget,
                 'months' => $months,

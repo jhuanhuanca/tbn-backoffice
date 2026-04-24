@@ -57,34 +57,41 @@ async function confirmarColocacion() {
               <span v-if="sponsor">Patrocinador: {{ sponsor.name }}.</span>
             </p>
             <p v-if="err" class="text-danger text-sm">{{ err }}</p>
-            <div class="d-flex justify-content-center mt-3">
-              <div class="btn-group btn-group-sm" role="group" aria-label="Preferencia de colocación">
-                <button
-                  type="button"
-                  class="btn"
-                  :class="placement === 'left' ? 'btn-success' : 'btn-outline-success'"
-                  @click="placement = 'left'"
-                >
-                  Pierna izquierda
-                </button>
-                <button
-                  type="button"
-                  class="btn"
-                  :class="placement === 'right' ? 'btn-success' : 'btn-outline-success'"
-                  @click="placement = 'right'"
-                >
-                  Pierna derecha
-                </button>
-                <button
-                  type="button"
-                  class="btn"
-                  :class="placement === 'auto' ? 'btn-success' : 'btn-outline-success'"
-                  @click="placement = 'auto'"
-                >
-                  Automático
-                </button>
-              </div>
-            </div>
+            <div class="mb-3">
+                  <label class="form-label text-sm mb-2">
+                    Colocación binaria (obligatorio) <span class="text-danger">*</span>
+                  </label>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      :class="preferredBinaryLeg === 'left' ? 'bg-gradient-success text-white' : 'btn-outline-success'"
+                      @click="preferredBinaryLeg = 'left'"
+                    >
+                      Izquierda
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      :class="preferredBinaryLeg === 'right' ? 'bg-gradient-success text-white' : 'btn-outline-success'"
+                      @click="preferredBinaryLeg = 'right'"
+                    >
+                      Derecha
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      :class="preferredBinaryLeg === 'auto' ? 'bg-gradient-success text-white' : 'btn-outline-success'"
+                      @click="preferredBinaryLeg = 'auto'"
+                    >
+                      Automático
+                    </button>
+                  </div>
+                  <p class="text-xxs text-muted mb-0 mt-2">
+                    Se aplicará al activar la cuenta: si eliges izquierda/derecha, intentaremos colocarte bajo tu patrocinador en esa
+                    pierna. Si no hay cupo, se colocará automáticamente en el primer cupo disponible.
+                  </p>
+                </div>
             <div class="d-flex flex-wrap justify-content-center gap-3 mt-4">
               <argon-button
                 color="success"

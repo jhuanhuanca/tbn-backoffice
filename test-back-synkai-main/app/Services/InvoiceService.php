@@ -57,7 +57,12 @@ class InvoiceService
             ]);
 
             foreach ($order->items as $line) {
-                $desc = $line->product?->name ?? $line->package?->name ?? 'Ítem';
+                $m = $line->meta ?? [];
+                $desc = $line->product?->name
+                    ?? $line->package?->name
+                    ?? (! empty($m['label']) ? (string) $m['label'] : null)
+                    ?? (! empty($m['founder_package']) ? 'Paquete Fundador ('.(string) $m['founder_package'].')' : null)
+                    ?? 'Ítem';
                 InvoiceItem::query()->create([
                     'invoice_id' => $invoice->id,
                     'product_id' => $line->product_id,

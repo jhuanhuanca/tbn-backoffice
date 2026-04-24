@@ -13,6 +13,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\HandleCors;
 use App\Jobs\ApplyBinaryMonthlyPenaltyJob;
 use App\Jobs\CalculateLeadershipMonthlyBonusesJob;
+use App\Models\User;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -32,12 +33,13 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withSchedule(function (Schedule $schedule) {
-        // Binario híbrido diario (B): calcular día anterior a las 00:10
+        // Binario híbrido diario (B): recalcular cada hora (día actual)
         if (config('mlm.binary.hybrid_daily.enabled', false)) {
             $schedule->call(function () {
-                $dayKey = now()->subDay()->toDateString();
+                // Recalcula el día actual para reflejar PV que entra durante el día.
+                $dayKey = now()->toDateString();
                 CalculateBinaryDailyBonusesJob::dispatch($dayKey);
-            })->dailyAt('00:10');
+            })->hourlyAt(10);
         }
 
         // Cierre binario:
@@ -70,6 +72,16 @@ return Application::configure(basePath: dirname(__DIR__))
             $monthKey = now()->subMonth()->format('Y-m');
             CalculateLeadershipMonthlyBonusesJob::dispatch($monthKey);
         })->monthlyOn(1, '04:10');
+
+        // Reset PV mensual (calificación): arranca mes nuevo en 0.
+        // lifetime_qualifying_pv NO se reinicia (base histórica para rangos/carrera).
+        $schedule->call(function () {
+            User::query()->update([
+                'monthly_qualifying_pv' => 0,
+                'is_mlm_qualified' => false,
+                'last_qualification_month' => now()->format('Y-m'),
+            ]);
+        })->monthlyOn(1, '00:05');
 
         // Penalización mensual del acumulado no pagado (binario híbrido).
         if (config('mlm.binary.hybrid_daily.enabled', false)) {

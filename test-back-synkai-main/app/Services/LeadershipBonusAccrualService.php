@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Rank;
 use App\Models\User;
 use App\Models\UserMonthlyRankSnapshot;
 use Carbon\Carbon;
@@ -29,8 +30,10 @@ class LeadershipBonusAccrualService
             $monthKey = Carbon::now()->subMonth()->format('Y-m');
         }
 
-        $requiredMonths = (int) config('mlm.leadership.consecutive_months_required', 3);
         $bobPerPv = (string) config('mlm.pv_value.bob_per_pv', '7');
+
+        // Cache simple en memoria por ejecución (evita queries repetidas).
+        $rankById = [];
 
         User::query()
             ->with('rank')
@@ -41,21 +44,8 @@ class LeadershipBonusAccrualService
             ->where('account_status', 'active')
             ->whereHas('rank', fn ($q) => $q->where('leadership_rate', '>', 0))
             ->orderBy('id')
-            ->chunkById(200, function ($users) use ($monthKey, $requiredMonths, $bobPerPv) {
+            ->chunkById(200, function ($users) use ($monthKey, $bobPerPv, &$rankById) {
                 foreach ($users as $u) {
-                    $rankSlug = (string) ($u->rank?->slug ?? '');
-                    $rate = (string) ($u->rank?->leadership_rate ?? config('mlm.leadership.default_rate', 0));
-                    $rate = $this->clampBetweenZeroOne($rate, 6);
-                    if (bccomp($rate, '0', 6) !== 1) {
-                        continue;
-                    }
-
-                    $requiredPv = $this->requiredPvForRankSlug($rankSlug);
-                    $requiredPv = $this->clampNonNegativeDecimal($requiredPv, 4);
-                    if (bccomp($requiredPv, '0', 4) !== 1) {
-                        continue;
-                    }
-
                     $snap = UserMonthlyRankSnapshot::query()
                         ->where('user_id', $u->id)
                         ->where('month_key', $monthKey)
@@ -65,8 +55,36 @@ class LeadershipBonusAccrualService
                         continue;
                     }
 
-                    $streak = (int) ($snap->leadership_streak_months ?? 0);
-                    if ($streak < $requiredMonths) {
+                    // Regla corregida:
+                    // - El bono se evalúa MES A MES.
+                    // - Se paga solo si en ese mes alcanzó el PV requerido del rango (según snapshot del mes).
+                    // - No requiere "racha de 3 meses"; cada mes es independiente.
+
+                    $rankId = (int) ($snap->rank_id ?? 0);
+                    if ($rankId <= 0) {
+                        continue;
+                    }
+
+                    if (! isset($rankById[$rankId])) {
+                        $rankById[$rankId] = Rank::query()->find($rankId);
+                    }
+                    /** @var Rank|null $rank */
+                    $rank = $rankById[$rankId];
+                    if (! $rank) {
+                        continue;
+                    }
+
+                    $rate = $this->clampBetweenZeroOne((string) ($rank->leadership_rate ?? '0'), 6);
+                    if (bccomp($rate, '0', 6) !== 1) {
+                        continue;
+                    }
+
+                    // El PV requerido se evalúa según el rango del SNAPSHOT del mes (no el rango actual).
+                    // Esto hace el cálculo consistente históricamente aunque el usuario cambie de rango después
+                    // o se ajusten requisitos en config.
+                    $requiredPv = $this->requiredPvForRankSlug((string) ($snap->rank_slug ?? $rank->slug ?? ''));
+                    $requiredPv = $this->clampNonNegativeDecimal($requiredPv, 4);
+                    if (bccomp($requiredPv, '0', 4) !== 1) {
                         continue;
                     }
 

@@ -23,9 +23,21 @@ class UserQualificationService
         $month = Carbon::now()->format('Y-m');
         $start = Carbon::now()->startOfMonth();
         $end = Carbon::now()->endOfMonth();
-
-        $pv = Order::sumCommissionablePvForUserBetween((int) $user->id, $start, $end);
         $threshold = (string) config('mlm.monthly_activation_pv', '200');
+
+        // Fuente principal: `monthly_qualifying_pv` se incrementa por compra (CommissionEngine).
+        // Fallback: si el usuario no fue actualizado por cola/job en algún momento (desalineación),
+        // recalculamos el mes desde pedidos completados para consistencia.
+        $pvStored = bcadd((string) ($user->monthly_qualifying_pv ?? '0'), '0', 2);
+        $pv = $pvStored;
+        $lastMonth = (string) ($user->last_qualification_month ?? '');
+        if ($lastMonth !== $month || $pvStored === '0.00') {
+            $pvRecalc = Order::sumCommissionablePvForUserBetween((int) $user->id, $start, $end);
+            // Si el recálculo es mayor (o el mes cambió), preferimos el valor recalculado.
+            if ($lastMonth !== $month || bccomp($pvRecalc, $pvStored, 2) === 1) {
+                $pv = bcadd($pvRecalc, '0', 2);
+            }
+        }
         $qualified = bccomp($pv, $threshold, 2) >= 0;
 
         $was = (bool) $user->is_mlm_qualified;

@@ -468,7 +468,7 @@ export default {
         binary: {
           title: "Bono binario",
           help:
-            "Modo híbrido (B): cada día se empareja pierna débil (min) con carry; el bono diario se guarda en backend. El pago que ves en comisiones suele ser semanal (un solo evento 'binary' por semana ISO), con tope semanal en BOB (USD×tipo de cambio).",
+            "Modo híbrido (B): cada día se empareja pierna débil (min) con carry; el bono diario se guarda en la base de datos. El pago que ves en comisiones suele ser semanal, con tope semanal en BOB.",
           types: ["binary"],
         },
         leadership: {

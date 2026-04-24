@@ -8,8 +8,30 @@ import Carousel from "./components/Carousel.vue";
 import CategoriesList from "./components/CategoriesList.vue";
 import { fetchDashboard, fetchProfile } from "@/services/me";
 import { useMlmLiveRefresh } from "@/composables/useMlmLiveRefresh";
+import { getEffectiveRankName } from "@/utils/mlm";
 
 const store = useStore();
+
+/** Soporte WhatsApp (Bolivia): número sin + para wa.me */
+const SUPPORT_WA_PHONE = "59169795474";
+
+const supportOpen = ref(false);
+const supportText = ref("");
+
+function toggleSupport() {
+  supportOpen.value = !supportOpen.value;
+}
+
+function sendSupportWhatsApp() {
+  const body = String(supportText.value || "").trim();
+  if (!body) return;
+  const u = store.state.auth.user;
+  const header = `[TBN-soporte — Consulta o reclamo]\nSocio: ${u?.name || "—"} · Código: ${u?.member_code || u?.referral_code || "—"}\n\n`;
+  const url = `https://wa.me/${SUPPORT_WA_PHONE}?text=${encodeURIComponent(header + body)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+  supportText.value = "";
+  supportOpen.value = false;
+}
 const loading = ref(true);
 const loadError = ref(null);
 const dashboard = ref(null);
@@ -104,11 +126,9 @@ const kpis = computed(() => {
   const bw = d?.binary_week;
   const rc = d?.referrals_direct_count ?? 0;
   const rankName =
-    d?.rank?.name ||
-    d?.user?.rank_name ||
-    user.value?.rank?.name ||
-    user.value?.rank_name ||
-    "—";
+    getEffectiveRankName(d?.rank) !== "—"
+      ? getEffectiveRankName(d?.rank)
+      : getEffectiveRankName(d?.user || user.value);
   const act =
     d?.user?.is_mlm_qualified || user.value?.is_mlm_qualified ? "Calificado" : "Pendiente";
 
@@ -356,42 +376,50 @@ onMounted(async () => {
         {{ plataBanner.message }}
       </p>
     </div>
-    <div v-if="progressRank && progressAutoOkm" class="card border-0 shadow-sm mb-4 dashboard-home__lift">
+    <div
+      v-if="progressRank || progressAutoOkm || (plataBanner?.show && progressPlataWindow)"
+      class="card border-0 shadow-sm mb-4 dashboard-home__lift"
+    >
       <div class="card-body">
         <h6 class="text-uppercase text-secondary text-xs font-weight-bolder mb-3">
           Progreso de carrera y bonos
         </h6>
-        <p class="text-sm mb-1">{{ progressRank.label }}</p>
-        <p class="text-xs text-muted mb-1">{{ progressRank.subtitle }}</p>
-        <div class="progress mb-4 position-relative" style="height: 12px">
-          <div
-            class="progress-bar bg-gradient-success"
-            role="progressbar"
-            :style="{ width: Math.min(100, progressRank.percent || 0) + '%' }"
-            :aria-valuenow="progressRank.percent"
-            aria-valuemin="0"
-            aria-valuemax="100"
-          />
-          <span class="progress-label text-xxs">{{ Math.round(progressRank.percent || 0) }}%</span>
-        </div>
-        <p class="text-sm mb-1">{{ progressAutoOkm.label }}</p>
-        <p class="text-xs text-muted mb-1">
-          Acumulado ≈ {{ formatUsd(progressAutoOkm.earned_usd) }} de
-          {{ formatUsd(progressAutoOkm.target_usd) }}
-          (comisiones en BOB: {{ formatBs(progressAutoOkm.earned_bob) }} · tipo
-          {{ progressAutoOkm.bob_per_usd }} BOB/USD)
-        </p>
-        <div class="progress mb-0 position-relative" style="height: 12px">
-          <div
-            class="progress-bar bg-gradient-warning"
-            role="progressbar"
-            :style="{ width: Math.min(100, progressAutoOkm.percent || 0) + '%' }"
-            :aria-valuenow="progressAutoOkm.percent"
-            aria-valuemin="0"
-            aria-valuemax="100"
-          />
-          <span class="progress-label text-xxs">{{ Math.round(progressAutoOkm.percent || 0) }}%</span>
-        </div>
+        <template v-if="progressRank">
+          <p class="text-sm mb-1">{{ progressRank.label }}</p>
+          <p class="text-xs text-muted mb-1">{{ progressRank.subtitle }}</p>
+          <div class="progress mb-4 position-relative" style="height: 12px">
+            <div
+              class="progress-bar bg-gradient-success"
+              role="progressbar"
+              :style="{ width: Math.min(100, progressRank.percent || 0) + '%' }"
+              :aria-valuenow="progressRank.percent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            />
+            <span class="progress-label text-xxs">{{ Math.round(progressRank.percent || 0) }}%</span>
+          </div>
+        </template>
+
+        <template v-if="progressAutoOkm">
+          <p class="text-sm mb-1">{{ progressAutoOkm.label }}</p>
+          <p class="text-xs text-muted mb-1">
+            Acumulado ≈ {{ formatUsd(progressAutoOkm.earned_usd) }} de
+            {{ formatUsd(progressAutoOkm.target_usd) }}
+            (comisiones en BOB: {{ formatBs(progressAutoOkm.earned_bob) }} · tipo
+            {{ progressAutoOkm.bob_per_usd }} BOB/USD)
+          </p>
+          <div class="progress mb-0 position-relative" style="height: 12px">
+            <div
+              class="progress-bar bg-gradient-warning"
+              role="progressbar"
+              :style="{ width: Math.min(100, progressAutoOkm.percent || 0) + '%' }"
+              :aria-valuenow="progressAutoOkm.percent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            />
+            <span class="progress-label text-xxs">{{ Math.round(progressAutoOkm.percent || 0) }}%</span>
+          </div>
+        </template>
         <template v-if="plataBanner?.show && progressPlataWindow">
           <p class="text-sm mb-1 mt-4">{{ progressPlataWindow.label }}</p>
           <p class="text-xs text-muted mb-1">{{ progressPlataWindow.subtitle }}</p>
@@ -583,6 +611,45 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div class="dashboard-support-root">
+        <button
+          type="button"
+          class="btn btn-success rounded-circle shadow-lg dashboard-support-fab"
+          aria-label="Abrir chat de soporte WhatsApp"
+          @click="toggleSupport"
+        >
+          <i class="fab fa-whatsapp fa-lg" aria-hidden="true"></i>
+        </button>
+        <div v-if="supportOpen" class="dashboard-support-backdrop" @click="supportOpen = false"></div>
+        <div v-if="supportOpen" class="card border-0 shadow-lg dashboard-support-panel">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="mb-0 text-dark font-weight-bolder">Soporte TBN-living</h6>
+              <button type="button" class="btn-close" aria-label="Cerrar" @click="supportOpen = false"></button>
+            </div>
+            <p class="text-xs text-muted mb-2">
+              Escribe tu consulta o reclamo. Al enviar se abrirá WhatsApp al equipo de soporte.
+            </p>
+            <textarea
+              v-model="supportText"
+              class="form-control form-control-sm mb-2"
+              rows="4"
+              placeholder="Describe tu consulta o reclamo…"
+            />
+            <button
+              type="button"
+              class="btn btn-success btn-sm w-100"
+              :disabled="!supportText.trim()"
+              @click="sendSupportWhatsApp"
+            >
+              Enviar por WhatsApp
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -673,6 +740,37 @@ onMounted(async () => {
 }
 .text-xxs {
   font-size: 0.65rem;
+}
+
+.dashboard-support-root {
+  position: relative;
+  z-index: 1080;
+}
+/* Por encima del botón de configuración Argon (.fixed-plugin-button: bottom 30px, ~3rem alto) */
+.dashboard-support-fab {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: calc(30px + 3rem + 14px + env(safe-area-inset-bottom, 0px));
+  width: 3.25rem;
+  height: 3.25rem;
+  z-index: 1105;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.dashboard-support-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 1104;
+}
+.dashboard-support-panel {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: calc(30px + 3rem + 14px + 3.25rem + 16px + env(safe-area-inset-bottom, 0px));
+  width: min(22rem, calc(100vw - 2rem));
+  z-index: 1106;
+  border-radius: 0.75rem;
 }
 .progress-label {
   position: absolute;

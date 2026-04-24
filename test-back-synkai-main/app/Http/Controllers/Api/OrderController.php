@@ -8,8 +8,10 @@ use App\Models\OrderItem;
 use App\Models\Package;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\FounderPackages;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
@@ -40,14 +42,26 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'tipo' => 'required|string|in:producto,paquete,mixto',
+            'tipo' => 'required|string|in:producto,paquete,mixto,fundador',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'nullable|exists:products,id',
             'items.*.package_id' => 'nullable|exists:packages,id',
+            'items.*.founder_package' => 'nullable|string|in:basico,avanzado,profesional,fundador',
             'items.*.cantidad' => 'required|integer|min:1',
             'payment_settlement' => 'nullable|string|in:immediate,manual',
             'payment_method' => 'nullable|string|max:32',
         ]);
+
+        foreach ($data['items'] as $i => $row) {
+            $n = (int) (! empty($row['product_id']))
+                + (int) (! empty($row['package_id']))
+                + (int) (! empty($row['founder_package']));
+            if ($n !== 1) {
+                throw ValidationException::withMessages([
+                    "items.$i" => ['Cada ítem debe ser exactamente un producto, un paquete o un paquete fundador.'],
+                ]);
+            }
+        }
 
         $immediate = ($data['payment_settlement'] ?? 'immediate') === 'immediate';
 
@@ -60,11 +74,24 @@ class OrderController extends Controller
                         'message' => 'Los clientes preferentes solo pueden comprar productos (no paquetes de socio).',
                     ], 422);
                 }
+                if (! empty($row['founder_package'])) {
+                    return response()->json([
+                        'message' => 'Los clientes preferentes no pueden adquirir paquetes fundador.',
+                    ], 422);
+                }
             }
             if (($data['tipo'] ?? '') !== 'producto') {
                 return response()->json([
                     'message' => 'Los clientes preferentes solo realizan pedidos de tipo producto.',
                 ], 422);
+            }
+        }
+
+        $hasFounderLine = false;
+        foreach ($data['items'] as $row) {
+            if (! empty($row['founder_package'])) {
+                $hasFounderLine = true;
+                break;
             }
         }
 
@@ -76,7 +103,12 @@ class OrderController extends Controller
                     break;
                 }
             }
-            if (! $hasPackage) {
+            if (! $hasPackage && $hasFounderLine) {
+                return response()->json([
+                    'message' => 'Para activar tu cuenta el pedido debe incluir al menos un paquete de socio. Puedes combinar paquete fundador con un paquete en el mismo pedido.',
+                ], 422);
+            }
+            if (! $hasPackage && ! $hasFounderLine) {
                 return response()->json([
                     'message' => 'Para activar tu cuenta el pedido debe incluir al menos un paquete.',
                 ], 422);
@@ -120,12 +152,37 @@ class OrderController extends Controller
             $qtySum = 0;
 
             foreach ($data['items'] as $row) {
-                if (empty($row['product_id']) && empty($row['package_id'])) {
-                    throw new \InvalidArgumentException('Cada ítem debe tener product_id o package_id');
-                }
-
                 $qty = (int) $row['cantidad'];
                 $qtySum += $qty;
+
+                if (! empty($row['founder_package'])) {
+                    $slug = (string) $row['founder_package'];
+                    $unit = FounderPackages::priceBob($slug);
+                    $pvUnit = FounderPackages::pv($slug);
+                    $line = bcmul($unit, (string) $qty, 2);
+                    $pvLine = bcmul($pvUnit, (string) $qty, 2);
+
+                    OrderItem::query()->create([
+                        'order_id' => $order->id,
+                        'product_id' => null,
+                        'package_id' => null,
+                        'cantidad' => $qty,
+                        'precio_unitario' => $unit,
+                        'precio_total' => $line,
+                        'pv_points' => $pvLine,
+                        'commissionable_pv' => $pvLine,
+                        'commissionable_amount' => $line,
+                        'meta' => [
+                            'founder_package' => $slug,
+                            'label' => 'Paquete Fundador ('.$slug.')',
+                        ],
+                    ]);
+
+                    $total = bcadd($total, $line, 2);
+                    $totalPv = bcadd($totalPv, $pvLine, 2);
+
+                    continue;
+                }
 
                 if (! empty($row['package_id'])) {
                     $pkg = Package::query()->findOrFail($row['package_id']);

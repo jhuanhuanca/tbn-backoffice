@@ -10,11 +10,13 @@ use App\Models\BinaryWeeklyBonus;
 use App\Models\BinaryWeeklyCarry;
 use App\Models\CommissionEvent;
 use App\Models\Rank;
+use App\Models\Order;
 use App\Models\User;
 use App\Services\BinaryService;
 use App\Services\CareerRankService;
 use App\Services\MlmBonusProgressService;
 use App\Services\WalletService;
+use App\Support\FounderPackages;
 use Illuminate\Http\Request;
 
 class MeController extends Controller
@@ -122,16 +124,20 @@ class MeController extends Controller
         ]);
     }
 
-    public function referrals(Request $request)
+    public function referrals(Request $request, CareerRankService $careerRankService)
     {
         $rows = User::query()
             ->where('sponsor_id', $request->user()->id)
-            ->with(['rank:id,name,slug', 'binaryPlacement'])
+            ->with(['rank:id,name,slug', 'binaryPlacement', 'registrationPackage', 'referrals.rank'])
             ->orderByDesc('created_at')
             ->get();
 
-        $items = $rows->map(function (User $u) {
+        $rankNamesBySlug = Rank::query()->pluck('name', 'slug')->all();
+
+        $items = $rows->map(function (User $u) use ($careerRankService, $rankNamesBySlug) {
             $leg = $u->binaryPlacement?->leg_position;
+            $computedSlug = $careerRankService->computeHighestEligibleRankSlug($u);
+            $computedName = (string) ($rankNamesBySlug[$computedSlug] ?? $computedSlug);
 
             return [
                 'id' => $u->id,
@@ -145,7 +151,8 @@ class MeController extends Controller
                 'joined_at' => $u->created_at?->toIso8601String(),
                 'monthly_qualifying_pv' => $u->monthly_qualifying_pv,
                 'account_status' => $u->account_status,
-                'rank_name' => $u->rank?->name ?? '—',
+                'rank_name' => $computedName !== '' ? $computedName : '—',
+                'rank_slug' => $computedSlug,
             ];
         });
 
@@ -170,7 +177,7 @@ class MeController extends Controller
      * Árbol UNILEVEL hasta N generaciones (por sponsor_id).
      * Retorna niveles (1..depth) y una estructura children_by_sponsor para render.
      */
-    public function unilevelTree(Request $request)
+    public function unilevelTree(Request $request, CareerRankService $careerRankService)
     {
         /** @var User $me */
         $me = $request->user();
@@ -187,15 +194,18 @@ class MeController extends Controller
         $childrenBySponsor = [];
 
         $currentSponsorIds = [$me->id];
+        $rankNamesBySlug = Rank::query()->pluck('name', 'slug')->all();
 
         for ($gen = 1; $gen <= $depth; $gen++) {
             $rows = User::query()
                 ->whereIn('sponsor_id', $currentSponsorIds)
-                ->with(['rank:id,name,slug'])
+                ->with(['rank:id,name,slug', 'registrationPackage', 'referrals.rank'])
                 ->orderBy('created_at')
                 ->get();
 
-            $items = $rows->map(function (User $u) {
+            $items = $rows->map(function (User $u) use ($careerRankService, $rankNamesBySlug) {
+                $computedSlug = $careerRankService->computeHighestEligibleRankSlug($u);
+                $computedName = (string) ($rankNamesBySlug[$computedSlug] ?? $computedSlug);
                 return [
                     'id' => $u->id,
                     'sponsor_id' => $u->sponsor_id,
@@ -205,7 +215,8 @@ class MeController extends Controller
                     'fecha_alta' => $u->created_at?->format('d/m/Y'),
                     'monthly_qualifying_pv' => $u->monthly_qualifying_pv,
                     'account_status' => $u->account_status,
-                    'rank_name' => $u->rank?->name ?? '—',
+                    'rank_name' => $computedName !== '' ? $computedName : '—',
+                    'rank_slug' => $computedSlug,
                 ];
             })->values();
 
@@ -240,7 +251,7 @@ class MeController extends Controller
     /**
      * Vista de árbol binario (2 niveles de profundidad) + KPIs para el front.
      */
-    public function binaryTree(Request $request, BinaryService $binaryService, WalletService $walletService)
+    public function binaryTree(Request $request, BinaryService $binaryService, WalletService $walletService, CareerRankService $careerRankService)
     {
         /** @var User $user */
         $user = $request->user()->loadMissing('rank');
@@ -283,7 +294,10 @@ class MeController extends Controller
             ->where('type', 'residual')
             ->sum('amount');
 
-        $rankName = $user->rank?->name ?? '—';
+        // Rango “vigente” calculado por reglas (mismo criterio que Dashboard/Profile).
+        $computedSlug = $careerRankService->computeHighestEligibleRankSlug($user->loadMissing('registrationPackage', 'referrals.rank'));
+        $computedRank = Rank::query()->where('slug', $computedSlug)->first();
+        $rankName = $computedRank?->name ?? $computedSlug;
 
         return response()->json([
             'week_key' => $periodKey,
@@ -302,6 +316,178 @@ class MeController extends Controller
             'bir_percentages' => config('mlm.bir.schedule', []),
             'tree' => $this->binarySubtreePayload($user->id, 2),
         ]);
+    }
+
+    /**
+     * Lazy loading del árbol binario: devuelve left/right directos de un parent (por defecto, el usuario autenticado).
+     *
+     * Forma del nodo:
+     * {
+     *   id, name, code, phone, is_active,
+     *   left: object|null,
+     *   right: object|null,
+     *   has_children: bool
+     * }
+     */
+    public function binaryTreeChildren(Request $request)
+    {
+        /** @var User $me */
+        $me = $request->user();
+
+        $parentId = (int) ($request->query('parent_id') ?? 0);
+        if ($parentId <= 0) {
+            $parentId = (int) $me->id;
+        }
+
+        // Seguridad: permitir solo el propio usuario o nodos dentro de su downline binario.
+        if ($parentId !== (int) $me->id && ! $this->isInMyBinaryDownline($me->id, $parentId)) {
+            return response()->json(['ok' => false, 'message' => 'Nodo fuera de tu red.'], 403);
+        }
+
+        $parent = User::query()->find($parentId);
+        if (! $parent) {
+            return response()->json(['ok' => false, 'message' => 'Usuario no encontrado.'], 404);
+        }
+
+        $leftPl = BinaryPlacement::query()
+            ->where('parent_user_id', $parentId)
+            ->where('leg_position', BinaryPlacement::LEG_LEFT)
+            ->first();
+        $rightPl = BinaryPlacement::query()
+            ->where('parent_user_id', $parentId)
+            ->where('leg_position', BinaryPlacement::LEG_RIGHT)
+            ->first();
+
+        $leftUser = $leftPl ? User::query()->find($leftPl->user_id) : null;
+        $rightUser = $rightPl ? User::query()->find($rightPl->user_id) : null;
+
+        $node = $this->binaryNodeDto($parent);
+        $node['left'] = $leftUser ? $this->binaryNodeDto($leftUser) : null;
+        $node['right'] = $rightUser ? $this->binaryNodeDto($rightUser) : null;
+
+        return response()->json(['ok' => true, 'node' => $node]);
+    }
+
+    /**
+     * Buscar un usuario por nombre o código dentro de mi red binaria y devolver su nodo (con hijos left/right).
+     *
+     * Query params:
+     * - q: string (nombre o código)
+     */
+    public function binaryTreeSearch(Request $request)
+    {
+        /** @var User $me */
+        $me = $request->user();
+
+        $q = trim((string) $request->query('q', ''));
+        if ($q === '' || mb_strlen($q) < 2) {
+            return response()->json(['ok' => false, 'message' => 'Escribe al menos 2 caracteres.'], 422);
+        }
+
+        // 1) Intento por código exacto (member_code o referral_code).
+        $byCode = User::query()
+            ->where(function ($w) use ($q) {
+                $w->where('member_code', $q)->orWhere('referral_code', $q);
+            })
+            ->first();
+
+        $candidate = null;
+        if ($byCode) {
+            $candidate = $byCode;
+        } else {
+            // 2) Búsqueda por nombre/código parcial; luego filtramos a mi downline.
+            $candidates = User::query()
+                ->where(function ($w) use ($q) {
+                    $w->where('name', 'like', '%' . $q . '%')
+                        ->orWhere('member_code', 'like', '%' . $q . '%')
+                        ->orWhere('referral_code', 'like', '%' . $q . '%');
+                })
+                ->orderByRaw("case when account_status = 'active' then 0 when account_status = 'pending' then 1 else 2 end")
+                ->limit(20)
+                ->get();
+
+            foreach ($candidates as $u) {
+                if ((int) $u->id === (int) $me->id || $this->isInMyBinaryDownline((int) $me->id, (int) $u->id)) {
+                    $candidate = $u;
+                    break;
+                }
+            }
+        }
+
+        if (! $candidate) {
+            return response()->json(['ok' => false, 'message' => 'No se encontró un usuario en tu red con ese dato.'], 404);
+        }
+
+        $id = (int) $candidate->id;
+        if ($id !== (int) $me->id && ! $this->isInMyBinaryDownline((int) $me->id, $id)) {
+            return response()->json(['ok' => false, 'message' => 'Usuario fuera de tu red.'], 403);
+        }
+
+        // Reutiliza la forma de binaryTreeChildren para que el front pueda renderizar con BinaryTreeBranch.
+        $leftPl = BinaryPlacement::query()
+            ->where('parent_user_id', $id)
+            ->where('leg_position', BinaryPlacement::LEG_LEFT)
+            ->first();
+        $rightPl = BinaryPlacement::query()
+            ->where('parent_user_id', $id)
+            ->where('leg_position', BinaryPlacement::LEG_RIGHT)
+            ->first();
+
+        $leftUser = $leftPl ? User::query()->find($leftPl->user_id) : null;
+        $rightUser = $rightPl ? User::query()->find($rightPl->user_id) : null;
+
+        $node = $this->binaryNodeDto($candidate);
+        $node['left'] = $leftUser ? $this->binaryNodeDto($leftUser) : null;
+        $node['right'] = $rightUser ? $this->binaryNodeDto($rightUser) : null;
+
+        return response()->json([
+            'ok' => true,
+            'q' => $q,
+            'match' => [
+                'id' => (int) $candidate->id,
+                'name' => (string) $candidate->name,
+                'code' => (string) ($candidate->member_code ?? $candidate->referral_code ?? $candidate->id),
+            ],
+            'node' => $node,
+        ]);
+    }
+
+    protected function binaryNodeDto(User $u): array
+    {
+        $u->loadMissing('rank');
+        $hasChildren = BinaryPlacement::query()->where('parent_user_id', $u->id)->exists();
+
+        return [
+            'id' => (int) $u->id,
+            'name' => (string) $u->name,
+            'code' => (string) ($u->member_code ?? $u->referral_code ?? $u->id),
+            'phone' => (string) ($u->phone ?? ''),
+            'email' => (string) ($u->email ?? ''),
+            'rank' => (string) ($u->rank?->name ?? '—'),
+            // PV acumulado histórico para rangos/carrera.
+            'pv_accumulated' => (string) ($u->lifetime_qualifying_pv ?? '0'),
+            'is_active' => (string) ($u->account_status ?? '') === 'active',
+            'left' => null,
+            'right' => null,
+            'has_children' => $hasChildren,
+        ];
+    }
+
+    protected function isInMyBinaryDownline(int $meId, int $candidateId): bool
+    {
+        // Subir por parent_user_id en binary_placements hasta encontrarme (o cortar).
+        $cursor = $candidateId;
+        for ($i = 0; $i < 80; $i++) {
+            $pl = BinaryPlacement::query()->where('user_id', $cursor)->first();
+            if (! $pl || ! $pl->parent_user_id) {
+                return false;
+            }
+            $cursor = (int) $pl->parent_user_id;
+            if ($cursor === $meId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function countBinaryDownlineUsers(int $parentUserId): int
@@ -457,7 +643,10 @@ class MeController extends Controller
                 ->orderByDesc('day_key')
                 ->get()
                 ->map(fn (BinaryDailyPayout $p) => [
-                    'day_key' => $p->day_key?->format('Y-m-d') ?? (string) $p->day_key,
+                    // day_key puede venir como string (Y-m-d) o Date; normalizamos a string.
+                    'day_key' => $p->day_key instanceof \DateTimeInterface
+                        ? $p->day_key->format('Y-m-d')
+                        : (string) $p->day_key,
                     'matched_pv' => (string) $p->matched_pv,
                     'daily_bonus_bob' => (string) $p->daily_bonus_bob,
                     'rate' => (string) (($p->meta ?? [])['rate'] ?? config('mlm.binary.hybrid_daily.rate', '0.21')),
@@ -515,6 +704,234 @@ class MeController extends Controller
             'bir_percentages' => config('mlm.bir.schedule', []),
             'items' => $items,
             'binary_hybrid' => $binaryHybrid,
+        ]);
+    }
+
+    /**
+     * Notificaciones para el panel: comisiones recientes, pedidos completados y avisos de rango.
+     */
+    public function notifications(Request $request, CareerRankService $careerRankService)
+    {
+        $uid = (int) $request->user()->id;
+        $items = [];
+
+        $u = $request->user()->loadMissing('rank');
+        $meta = (array) ($u->meta ?? []);
+        $dismissedIds = array_values(array_filter(array_map('strval', (array) ($meta['dismissed_notification_ids'] ?? []))));
+        $clearedAtRaw = $meta['notifications_cleared_at'] ?? null;
+        $clearedAt = null;
+        try {
+            if ($clearedAtRaw) {
+                $clearedAt = \Carbon\Carbon::parse((string) $clearedAtRaw);
+            }
+        } catch (\Throwable $e) {
+            $clearedAt = null;
+        }
+
+        if ($u->rank?->name) {
+            $items[] = [
+                'id' => 'rank-current',
+                'type' => 'rank',
+                'title' => 'Tu rango',
+                'body' => 'Rango en tu perfil: '.$u->rank->name,
+                'created_at' => optional($u->updated_at)?->toIso8601String(),
+                'url' => '/cuenta',
+            ];
+        }
+
+        $computedSlug = $careerRankService->computeHighestEligibleRankSlug($u);
+        $computedRank = Rank::query()->where('slug', $computedSlug)->first();
+        $eligibleName = $computedRank?->name ?? $computedSlug;
+        $storedSlug = $u->rank?->slug;
+        if ($computedRank && (string) $computedSlug !== (string) ($storedSlug ?? '')) {
+            $items[] = [
+                'id' => 'rank-eligible-'.substr(md5((string) $computedSlug), 0, 12),
+                'type' => 'rank',
+                'title' => 'Calificación de rango',
+                'body' => 'Por volumen y equipo podrías ascender a: '.$eligibleName.'. Revisa requisitos en Perfil.',
+                'created_at' => now()->toIso8601String(),
+                'url' => '/profile',
+            ];
+        }
+
+        $events = CommissionEvent::query()
+            ->where('beneficiary_user_id', $uid)
+            ->orderByDesc('created_at')
+            ->limit(25)
+            ->get();
+
+        foreach ($events as $ev) {
+            $items[] = [
+                'id' => 'commission-'.$ev->id,
+                'type' => 'commission',
+                'subtype' => $ev->type,
+                'title' => $this->notificationTitleForCommissionType((string) $ev->type),
+                'body' => 'Acreditación de '.number_format((float) $ev->amount, 2, ',', '.').' '.($ev->currency ?? 'BOB')
+                    .($ev->period_key ? ' · Periodo '.$ev->period_key : ''),
+                'created_at' => $ev->created_at?->toIso8601String(),
+                'url' => '/comisiones',
+                'meta' => $ev->meta,
+            ];
+        }
+
+        $orders = Order::query()
+            ->where('user_id', $uid)
+            ->where('estado', 'completado')
+            ->orderByDesc('completed_at')
+            ->limit(10)
+            ->get(['id', 'tipo', 'total', 'completed_at']);
+
+        foreach ($orders as $o) {
+            $items[] = [
+                'id' => 'order-'.$o->id,
+                'type' => 'order',
+                'title' => 'Pedido completado',
+                'body' => 'Tipo '.($o->tipo ?? '').' · Total '.number_format((float) $o->total, 2, ',', '.').' BOB',
+                'created_at' => $o->completed_at?->toIso8601String(),
+                'url' => '/compras-realizadas',
+            ];
+        }
+
+        usort($items, function ($a, $b) {
+            return strcmp((string) ($b['created_at'] ?? ''), (string) ($a['created_at'] ?? ''));
+        });
+
+        // Filtrar notificaciones descartadas por el usuario (por id o por "limpiar todo").
+        $items = array_values(array_filter($items, function ($n) use ($dismissedIds, $clearedAt) {
+            $id = (string) ($n['id'] ?? '');
+            if ($id !== '' && in_array($id, $dismissedIds, true)) {
+                return false;
+            }
+            if ($clearedAt) {
+                $created = (string) ($n['created_at'] ?? '');
+                if ($created !== '') {
+                    try {
+                        $ts = \Carbon\Carbon::parse($created);
+                        if ($ts->lessThanOrEqualTo($clearedAt)) {
+                            return false;
+                        }
+                    } catch (\Throwable $e) {
+                        // si no parsea, no filtramos por fecha
+                    }
+                }
+            }
+            return true;
+        }));
+
+        return response()->json([
+            'ok' => true,
+            'items' => array_slice($items, 0, 40),
+        ]);
+    }
+
+    /**
+     * Descartar notificaciones del panel.
+     *
+     * - Para limpiar todo: { all: true } (o query all=1)
+     * - Para descartar por id: { ids: ["commission-123", "order-55"] }
+     */
+    public function dismissNotifications(Request $request)
+    {
+        /** @var User $u */
+        $u = $request->user();
+        $meta = (array) ($u->meta ?? []);
+
+        $all = (bool) ($request->boolean('all') || $request->input('all') === true);
+        $ids = $request->input('ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_filter(array_map('strval', $ids)));
+
+        if ($all || empty($ids)) {
+            $meta['notifications_cleared_at'] = now()->toIso8601String();
+            $meta['dismissed_notification_ids'] = [];
+        } else {
+            $existing = array_values(array_filter(array_map('strval', (array) ($meta['dismissed_notification_ids'] ?? []))));
+            $set = array_values(array_unique(array_merge($existing, $ids)));
+            $meta['dismissed_notification_ids'] = $set;
+        }
+
+        $u->forceFill(['meta' => $meta])->save();
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function notificationTitleForCommissionType(string $type): string
+    {
+        return match ($type) {
+            'binary' => 'Comisión binaria',
+            'bir' => 'Bono inicio rápido',
+            'residual' => 'Comisión residual',
+            'venta_directa' => 'Venta directa',
+            'leadership' => 'Bono liderazgo',
+            default => 'Comisión',
+        };
+    }
+
+    public function founder(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user()->loadMissing('registrationPackage');
+
+        // Para el modal de paquetes en CardProductos:
+        // - Se usa PV PERSONAL del mes (monthly_qualifying_pv) como “PV personales real”.
+        //   Este es el PV que ve el usuario en su panel de calificación.
+        $pvCredited = bcadd((string) ($user->monthly_qualifying_pv ?? '0'), '0', 2);
+        $pvRegistrationPending = '0';
+
+        // Regla: si el socio aún no pagó activación, cuenta el PV del paquete de inscripción elegido (inscripción iniciada).
+        if ($user->activation_paid_at === null && $user->registrationPackage) {
+            $pvRegistrationPending = bcadd((string) ($user->registrationPackage->pv_points ?? '0'), '0', 2);
+        }
+
+        $pvTotal = bcadd($pvCredited, $pvRegistrationPending, 2);
+        $completed = (bool) ($user->paquete_fundador_completado ?? false);
+        $target = '1200';
+
+        if (! $completed && bccomp($pvTotal, $target, 2) >= 0) {
+            $completed = true;
+            $user->forceFill(['paquete_fundador_completado' => true])->save();
+        }
+
+        return response()->json([
+            'ok' => true,
+            // Compatibilidad: pv_actual ahora representa el total (acreditado + inscripción iniciada).
+            'pv_actual' => (string) $pvTotal,
+            'pv_actual_credited' => (string) $pvCredited,
+            'pv_registration_pending' => (string) $pvRegistrationPending,
+            'pv_actual_total' => (string) $pvTotal,
+            'target_pv' => $target,
+            'paquete_fundador_completado' => $completed,
+        ]);
+    }
+
+    public function founderPurchase(Request $request)
+    {
+        $data = $request->validate([
+            'package' => 'required|string|in:basico,avanzado,profesional,fundador',
+        ]);
+
+        /** @var User $user */
+        $user = $request->user()->fresh();
+        $pv = FounderPackages::pv($data['package']);
+
+        $current = bcadd((string) ($user->pv_actual ?? '0'), '0', 2);
+        $new = bcadd($current, $pv, 2);
+        $completed = bccomp($new, '1200', 2) >= 0;
+
+        $user->forceFill([
+            'pv_actual' => $new,
+            'paquete_fundador_completado' => $completed ? true : (bool) ($user->paquete_fundador_completado ?? false),
+        ])->save();
+
+        return response()->json([
+            'ok' => true,
+            'package' => $data['package'],
+            'pv_added' => $pv,
+            'pv_actual' => (string) $new,
+            'target_pv' => '1200',
+            'paquete_fundador_completado' => (bool) $user->paquete_fundador_completado,
         ]);
     }
 }

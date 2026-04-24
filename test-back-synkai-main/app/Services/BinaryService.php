@@ -232,13 +232,75 @@ class BinaryService
             }
         }
 
+        // PV para rangos/carrera (MLM común):
+        // - Proviene del volumen de red binario del periodo (raw left + raw right) por usuario (NO carry).
+        // - Se acumula de forma histórica en users.lifetime_qualifying_pv (NO reinicia).
+        // - Idempotente por periodo: se marca en PeriodClosure.meta.
+        $this->aplicarCareerPvDesdeVolumenBinario($closure, $periodKey);
+
         $closure->update([
             'status' => 'finished',
             'finished_at' => now(),
-            'meta' => ['parents_processed' => $allParents->count(), 'volume_period' => $closureType],
+            'meta' => array_merge((array) ($closure->meta ?? []), [
+                'parents_processed' => $allParents->count(),
+                'volume_period' => $closureType,
+            ]),
         ]);
 
         Log::info('MLM cierre binario', ['period' => $periodKey, 'type' => $closureType, 'parents' => $allParents->count()]);
+    }
+
+    /**
+     * Acumula PV histórico para carrera/rangos basado en volumen binario del periodo.
+     *
+     * Regla:
+     * - group_pv_periodo = left_raw + right_raw (sin carry)
+     * - lifetime_qualifying_pv += group_pv_periodo
+     */
+    protected function aplicarCareerPvDesdeVolumenBinario(PeriodClosure $closure, string $periodKey): void
+    {
+        $meta = (array) ($closure->meta ?? []);
+        if (($meta['career_pv_applied'] ?? false) === true) {
+            return;
+        }
+
+        // Suma por usuario: volume_pv ya es el raw PV del periodo (acumulado por pedidos).
+        $rows = BinaryLegVolumeWeekly::query()
+            ->selectRaw('parent_user_id, SUM(volume_pv) as group_pv')
+            ->where('week_key', $periodKey)
+            ->groupBy('parent_user_id')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            $closure->update(['meta' => array_merge($meta, ['career_pv_applied' => true, 'career_pv_applied_at' => now()->toIso8601String()])]);
+            return;
+        }
+
+        DB::transaction(function () use ($rows) {
+            foreach ($rows as $r) {
+                $uid = (int) ($r->parent_user_id ?? 0);
+                if ($uid <= 0) {
+                    continue;
+                }
+                $pv = (string) ($r->group_pv ?? '0');
+                // Evita negativos / nulos
+                if (! is_numeric($pv) || bccomp($pv, '0', 4) !== 1) {
+                    continue;
+                }
+                // Actualización atómica en DB (evita race conditions).
+                DB::statement(
+                    'UPDATE users SET lifetime_qualifying_pv = lifetime_qualifying_pv + ? WHERE id = ?',
+                    [bcadd($pv, '0', 2), $uid]
+                );
+            }
+        });
+
+        $closure->update([
+            'meta' => array_merge($meta, [
+                'career_pv_applied' => true,
+                'career_pv_applied_at' => now()->toIso8601String(),
+            ]),
+        ]);
     }
 
     protected function incrementarVolumenPierna(int $parentUserId, string $periodKey, string $leg, string $pv): void

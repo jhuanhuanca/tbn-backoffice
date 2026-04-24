@@ -147,6 +147,13 @@ class BinaryHybridDailyService
 
         $days = $this->daysOfIsoWeek($weekKey); // 7 day_keys
 
+        // Asegurar consistencia del carry: reconstruir (o recalcular) los 7 días en orden.
+        // Esto evita que un cierre semanal encuentre daily_payouts sin carry correcto
+        // (por ejemplo, cuando se ejecuta por primera vez o tras backfill).
+        foreach ($days as $dayKey) {
+            $this->processDaily($dayKey);
+        }
+
         $userIds = BinaryDailyPayout::query()
             ->whereIn('day_key', $days)
             ->distinct()

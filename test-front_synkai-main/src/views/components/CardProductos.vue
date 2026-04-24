@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch, nextTick } from "vue";
 import { useStore } from "vuex";
 import MiniStatisticsCard from "@/examples/Cards/MiniStatisticsCard.vue";
 import ArgonButton from "@/components/ArgonButton.vue";
-import { fetchProductsCatalog, createOrder, fetchProfile } from "@/services/me";
+import { fetchProductsCatalog, createOrder, fetchProfile, fetchFounderStatus } from "@/services/me";
 import { useMlmLiveRefresh } from "@/composables/useMlmLiveRefresh";
 import MlmPaymentMethodPanel from "@/components/MlmPaymentMethodPanel.vue";
 
@@ -59,6 +59,82 @@ const paymentSettlement = ref("immediate");
 const paymentMethodOffline = ref("efectivo");
 const cartJumpPulse = ref(false);
 
+// Paquete Fundador (progreso a 1200 PV)
+const founderLoading = ref(false);
+const founderErr = ref("");
+const founderModalOpen = ref(false);
+const founderPvActual = ref(0);
+const founderPvCredited = ref(0);
+const founderPvInscripcionPendiente = ref(0);
+const founderTargetPv = ref(1200);
+const founderCompleted = ref(false);
+const founderBuyLoading = ref(false);
+const founderBuyMsg = ref("");
+
+const founderPackages = [
+  { key: "basico", name: "Básico", priceBob: 1050, pv: 100 },
+  { key: "avanzado", name: "Avanzado", priceBob: 2700, pv: 300 },
+  { key: "profesional", name: "Profesional", priceBob: 5400, pv: 600 },
+  { key: "fundador", name: "Fundador", priceBob: 10800, pv: 1200 },
+];
+
+const founderMissingPv = computed(() => Math.max(0, Number(founderTargetPv.value) - Number(founderPvActual.value)));
+const founderProgressPct = computed(() => {
+  const t = Number(founderTargetPv.value) || 1200;
+  const v = Number(founderPvActual.value) || 0; // total (acreditado + inscripción pendiente)
+  return Math.max(0, Math.min(100, (v / t) * 100));
+});
+
+/** Segmento: PV acreditados (sin inscripción pendiente). */
+const founderCreditedPct = computed(() => {
+  const t = Number(founderTargetPv.value) || 1200;
+  const v = Number(founderPvCredited.value) || 0;
+  return Math.max(0, Math.min(100, (v / t) * 100));
+});
+
+/** Segmento: PV de inscripción iniciada (pendiente), sin solapar acreditado. */
+const founderRegBarPct = computed(() => {
+  const t = Number(founderTargetPv.value) || 1200;
+  const reg = Number(founderPvInscripcionPendiente.value) || 0;
+  if (t <= 0 || reg <= 0) return 0;
+  const creditedPct = founderCreditedPct.value;
+  const raw = (reg / t) * 100;
+  return Math.max(0, Math.min(raw, 100 - creditedPct));
+});
+
+/** PV de paquetes fundador ya añadidos al carrito (aún no pagados). */
+const founderPvEnCarrito = computed(() =>
+  carrito.value.reduce(
+    (sum, it) => sum + (it.founder_package ? Number(it.pv_points || 0) * Number(it.cantidad || 0) : 0),
+    0
+  )
+);
+
+/** PV acreditados + lo que llevas en el carrito (proyección). */
+const founderProyectadoPv = computed(() => Number(founderPvActual.value) + founderPvEnCarrito.value);
+
+/** Faltantes para 1200 PV considerando también el carrito actual. */
+const founderFaltantesProyectados = computed(() =>
+  Math.max(0, Number(founderTargetPv.value) - founderProyectadoPv.value)
+);
+
+/** Ancho % de la franja “en carrito” dentro de la barra (no solapa lo ya acreditado). */
+const founderCartBarPct = computed(() => {
+  const t = Number(founderTargetPv.value) || 1200;
+  const cart = founderPvEnCarrito.value;
+  if (t <= 0 || cart <= 0) return 0;
+  const actualPct = founderCreditedPct.value + founderRegBarPct.value;
+  const raw = (cart / t) * 100;
+  return Math.max(0, Math.min(raw, 100 - actualPct));
+});
+
+/** % de la meta ya cubierto con acreditado + carrito (para etiqueta final). */
+const founderProyectadoPct = computed(() => {
+  const t = Number(founderTargetPv.value) || 1200;
+  if (t <= 0) return 0;
+  return Math.max(0, Math.min(100, (founderProyectadoPv.value / t) * 100));
+});
+
 // Nuevas propiedades para el modal de imagen
 const modalOpen = ref(false);
 const selectedProducto = ref(null);
@@ -80,6 +156,8 @@ const userPv = computed(() => {
 const pvPedido = computed(() =>
   carrito.value.reduce((sum, it) => sum + Number(it.pv_points || 0) * Number(it.cantidad || 0), 0)
 );
+
+const totalPedidoPuntos = computed(() => `${pvPedido.value.toLocaleString("es-BO", { maximumFractionDigits: 2 })} PV`);
 
 const pvCatalogo = computed(() =>
   productos.value.reduce((sum, p) => sum + Number(p.puntosValor || 0), 0)
@@ -133,6 +211,7 @@ async function cargarProductos() {
 
 function cartKeyForLine(item) {
   if (item.key) return item.key;
+  if (item.founder_package) return `founder-${item.founder_package}`;
   if (item.product_id != null && item.product_id > 0) return `api-${item.product_id}`;
   if (item.esEstatico && item.localId != null) return `static-${item.localId}`;
   return `legacy-${item.product_id ?? "x"}`;
@@ -256,20 +335,38 @@ watch(paymentSettlement, (v) => {
   if (!paymentMethodOffline.value) paymentMethodOffline.value = "efectivo";
 });
 
+function inferTipoPedido() {
+  const hasFounder = carrito.value.some((it) => it.founder_package);
+  const hasProduct = carrito.value.some((it) => it.product_id && !it.founder_package);
+  const hasPackage = carrito.value.some((it) => it.package_id);
+  if (hasFounder && (hasProduct || hasPackage)) return "mixto";
+  if (hasFounder) return "fundador";
+  if (hasPackage && hasProduct) return "mixto";
+  if (hasPackage) return "paquete";
+  return "producto";
+}
+
 async function confirmarPedido() {
   checkoutErr.value = "";
   checkoutMsg.value = "";
   if (!carrito.value.length) return;
   checkoutLoading.value = true;
   try {
+    const items = carrito.value.map((it) => {
+      const cantidad = Number(it.cantidad);
+      if (it.founder_package) {
+        return { founder_package: it.founder_package, cantidad };
+      }
+      if (it.package_id) {
+        return { package_id: Number(it.package_id), cantidad };
+      }
+      return { product_id: Number(it.product_id), cantidad };
+    });
     const payload = {
-      tipo: "producto",
+      tipo: inferTipoPedido(),
       payment_settlement: paymentSettlement.value,
       payment_method: paymentSettlement.value === "manual" ? paymentMethodOffline.value : "online",
-      items: carrito.value.map((it) => ({
-        product_id: Number(it.product_id),
-        cantidad: Number(it.cantidad),
-      })),
+      items,
     };
     const order = await createOrder(payload);
     carrito.value = [];
@@ -279,6 +376,7 @@ async function confirmarPedido() {
         : "Pedido registrado correctamente.";
     await cargarProductos();
     await syncProfilePv();
+    await loadFounderStatus();
   } catch (e) {
     checkoutErr.value = e.response?.data?.message || "No se pudo crear el pedido.";
   } finally {
@@ -309,11 +407,226 @@ watch(modalOpen, async (open) => {
 onMounted(async () => {
   loadCartFromStorage();
   await cargarProductos();
+  await loadFounderStatus();
 });
+
+async function loadFounderStatus() {
+  if (!localStorage.getItem("token")) return;
+  founderLoading.value = true;
+  founderErr.value = "";
+  try {
+    const r = await fetchFounderStatus();
+    const credited = Number(r.pv_actual_credited ?? r.pv_actual ?? 0);
+    const regPending = Number(r.pv_registration_pending ?? 0);
+    const total = Number(r.pv_actual_total ?? r.pv_actual ?? 0);
+
+    // Fuente “real” de PV personales: store/auth (viene de /me en syncProfilePv).
+    // Si el store trae un valor mayor que el endpoint (por latencia), preferimos el store.
+    const storePv = Number(store.state.auth.user?.monthly_qualifying_pv ?? NaN);
+    const creditedVal = Number.isFinite(storePv) ? storePv : credited;
+
+    founderPvCredited.value = Number.isFinite(creditedVal) ? creditedVal : 0;
+    founderPvInscripcionPendiente.value = Number.isFinite(regPending) ? regPending : 0;
+    // El endpoint ya trae total; pero si credited fue sustituido por storePv, recalculamos total coherente.
+    const totalVal = Number.isFinite(total) ? total : founderPvCredited.value + founderPvInscripcionPendiente.value;
+    founderPvActual.value = Number.isFinite(storePv) ? founderPvCredited.value + founderPvInscripcionPendiente.value : totalVal;
+    founderTargetPv.value = Number(r.target_pv || 1200);
+    founderCompleted.value = !!r.paquete_fundador_completado;
+    // Abrir/cerrar en base a PV actuales reales.
+    founderModalOpen.value = !founderCompleted.value && founderPvActual.value < founderTargetPv.value;
+  } catch {
+    founderErr.value = "No se pudo cargar tu progreso del Paquete Fundador.";
+  } finally {
+    founderLoading.value = false;
+  }
+}
+
+async function añadirFundadorAlCarrito(pkgKey) {
+  if (!localStorage.getItem("token")) return;
+  const p = founderPackages.find((x) => x.key === pkgKey);
+  if (!p) return;
+  founderBuyLoading.value = true;
+  founderBuyMsg.value = "";
+  founderErr.value = "";
+  try {
+    const key = `founder-${pkgKey}`;
+    const ex = carrito.value.find((x) => x.key === key);
+    if (ex) {
+      ex.cantidad += 1;
+    } else {
+      carrito.value.push({
+        key,
+        founder_package: pkgKey,
+        nombre: `Paquete Fundador — ${p.name}`,
+        imagen: "",
+        precioSocio: p.priceBob,
+        precioCliente: p.priceBob,
+        pv_points: p.pv,
+        cantidad: 1,
+        esEstatico: true,
+        product_id: null,
+      });
+    }
+    founderBuyMsg.value = "Añadido al carrito. Completa el pago en la sección inferior.";
+    await nextTick();
+    goToCart();
+    setTimeout(() => {
+      founderModalOpen.value = false;
+      founderBuyMsg.value = "";
+    }, 1400);
+  } finally {
+    founderBuyLoading.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="py-4 container-fluid">
+    <div v-if="founderModalOpen" class="modal-backdrop fade show"></div>
+    <div
+      v-if="founderModalOpen"
+      class="modal fade show d-block"
+      tabindex="-1"
+      role="dialog"
+      aria-modal="true"
+      @click.self="founderModalOpen = false"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h6 class="modal-title">Completa tu Paquete Fundador (1200 PV)</h6>
+            <button type="button" class="btn-close" aria-label="Cerrar" @click="founderModalOpen = false" />
+          </div>
+          <div class="modal-body">
+            <div class="founder-progress-card border rounded-3 p-3 mb-3 bg-light">
+              <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+                <div>
+                  <span class="text-xs text-uppercase text-muted d-block">Tienes ahora</span>
+                  <span class="h5 mb-0 text-success font-weight-bolder">
+                    {{ Number(founderPvActual).toLocaleString("es-BO", { maximumFractionDigits: 2 }) }}
+                    <small class="text-sm font-weight-bold">PV</small>
+                  </span>
+                  <div v-if="founderPvInscripcionPendiente > 0" class="text-xxs text-muted mt-1">
+                    Incluye {{ founderPvInscripcionPendiente.toLocaleString("es-BO", { maximumFractionDigits: 2 }) }} PV de tu inscripción iniciada.
+                  </div>
+                </div>
+                <div class="text-end">
+                  <span class="text-xs text-uppercase text-muted d-block">Necesitas para completar</span>
+                  <span class="h5 mb-0 text-dark font-weight-bolder">
+                    {{ founderMissingPv.toLocaleString("es-BO", { maximumFractionDigits: 2 }) }}
+                    <small class="text-sm font-weight-bold">PV</small>
+                  </span>
+                  <span class="text-xxs text-muted d-block">hasta {{ founderTargetPv.toLocaleString("es-BO") }} PV meta</span>
+                </div>
+              </div>
+
+              <div class="founder-bar-labels d-flex justify-content-between text-xxs text-muted mb-1">
+                <span>0 PV</span>
+                <span>{{ founderTargetPv.toLocaleString("es-BO") }} PV (meta)</span>
+              </div>
+              <div
+                class="founder-bar-track rounded-pill overflow-hidden d-flex mb-1"
+                role="progressbar"
+                :aria-valuenow="Math.round(founderProgressPct)"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-label="`Progreso fundador: ${founderProgressPct.toFixed(0)} por ciento`"
+              >
+                <div
+                  class="founder-bar-segment founder-bar-segment--done"
+                  :style="{ width: `${founderCreditedPct}%` }"
+                  :title="`${Number(founderPvCredited).toLocaleString('es-BO')} PV acreditados`"
+                />
+                <div
+                  v-if="founderPvInscripcionPendiente > 0"
+                  class="founder-bar-segment founder-bar-segment--reg"
+                  :style="{ width: `${founderRegBarPct}%` }"
+                  :title="`${Number(founderPvInscripcionPendiente).toLocaleString('es-BO')} PV de inscripción iniciada (pendiente)`"
+                />
+                <div
+                  v-if="founderCartBarPct > 0"
+                  class="founder-bar-segment founder-bar-segment--cart"
+                  :style="{ width: `${founderCartBarPct}%` }"
+                  :title="`${founderPvEnCarrito.toLocaleString('es-BO')} PV en carrito (pendiente de pago)`"
+                />
+                <div class="founder-bar-segment founder-bar-segment--rest flex-grow-1" />
+              </div>
+              <div class="d-flex flex-wrap gap-3 text-xxs text-muted mb-0">
+                <span class="d-flex align-items-center gap-1">
+                  <span class="founder-legend founder-legend--done" aria-hidden="true" />
+                  Acreditado ({{ founderCreditedPct.toFixed(0) }}%)
+                </span>
+                <span v-if="founderPvInscripcionPendiente > 0" class="d-flex align-items-center gap-1">
+                  <span class="founder-legend founder-legend--reg" aria-hidden="true" />
+                  Inscripción iniciada ({{ founderRegBarPct.toFixed(0) }}%)
+                </span>
+                <span v-if="founderPvEnCarrito > 0" class="d-flex align-items-center gap-1">
+                  <span class="founder-legend founder-legend--cart" aria-hidden="true" />
+                  En carrito ({{ founderCartBarPct.toFixed(0) }}%)
+                </span>
+                <span class="d-flex align-items-center gap-1">
+                  <span class="founder-legend founder-legend--rest" aria-hidden="true" />
+                  Falta: {{ founderMissingPv.toLocaleString("es-BO", { maximumFractionDigits: 2 }) }} PV
+                </span>
+              </div>
+              <p v-if="founderPvEnCarrito > 0" class="text-xs text-primary mt-2 mb-0">
+                Con el carrito llegarías a
+                <strong>{{ founderProyectadoPv.toLocaleString("es-BO", { maximumFractionDigits: 2 }) }} PV</strong>
+                ({{ founderProyectadoPct.toFixed(0) }}% de la meta). Aún faltarían
+                <strong>{{ founderFaltantesProyectados.toLocaleString("es-BO", { maximumFractionDigits: 2 }) }} PV</strong>
+                tras pagar.
+              </p>
+            </div>
+
+            <p class="text-xs text-muted mb-3">
+              Cada paquete se <strong>suma al carrito</strong>; al confirmar el pedido y completarse el pago, esos PV se
+              acreditan a tu progreso fundador.
+            </p>
+
+            <div v-if="founderErr" class="alert alert-warning text-white mb-3">{{ founderErr }}</div>
+            <div v-if="founderBuyMsg" class="alert alert-success text-white mb-3">{{ founderBuyMsg }}</div>
+
+            <div class="row g-3">
+              <div v-for="p in founderPackages" :key="p.key" class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div>
+                        <h6 class="mb-1 text-dark">{{ p.name }}</h6>
+                        <div class="text-sm text-secondary mb-1">
+                          <strong>{{ p.pv }} PV</strong>
+                        </div>
+                      </div>
+                      <div class="text-end">
+                        <div class="text-sm text-dark font-weight-bolder">
+                          {{ formatearPrecio(p.priceBob) }}
+                        </div>
+                      </div>
+                    </div>
+                    <argon-button
+                      color="success"
+                      variant="gradient"
+                      size="sm"
+                      class="w-100 mt-2"
+                      :disabled="founderBuyLoading"
+                      @click="añadirFundadorAlCarrito(p.key)"
+                    >
+                      {{ founderBuyLoading ? "Añadiendo…" : "Añadir al carrito y pagar" }}
+                    </argon-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" @click="founderModalOpen = false">
+              Continuar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="row mb-4">
       <div class="col-12">
         <div class="card border-0 shadow">
@@ -486,11 +799,18 @@ onMounted(async () => {
                   <td>
                     <div class="d-flex align-items-center px-2 py-1">
                       <img
+                        v-if="item.imagen"
                         :src="item.imagen"
                         :alt="item.nombre"
                         class="avatar avatar-sm rounded me-2"
                         style="object-fit: cover"
                       />
+                      <div
+                        v-else
+                        class="avatar avatar-sm rounded me-2 bg-light border d-flex align-items-center justify-content-center text-xxs text-muted font-weight-bolder"
+                      >
+                        PF
+                      </div>
                       <span class="text-sm font-weight-bold">{{ item.nombre }}</span>
                     </div>
                   </td>
@@ -781,5 +1101,64 @@ onMounted(async () => {
   100% {
     box-shadow: 0 0 0 0 rgba(84, 177, 68, 0);
   }
+}
+
+/* Barra de progreso Paquete Fundador (PV actuales vs meta) */
+.founder-progress-card {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+.founder-bar-track {
+  height: 1.1rem;
+  background: #e9ecef;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.founder-bar-segment {
+  flex-shrink: 0;
+  min-width: 0;
+  transition: width 0.35s ease;
+}
+.founder-bar-segment--done {
+  background: linear-gradient(90deg, #2dce89, #54b144);
+}
+.founder-bar-segment--reg {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(245, 54, 92, 0.9),
+    rgba(245, 54, 92, 0.9) 6px,
+    rgba(255, 152, 0, 0.9) 6px,
+    rgba(255, 152, 0, 0.9) 12px
+  );
+}
+.founder-bar-segment--cart {
+  background: repeating-linear-gradient(
+    -45deg,
+    #11cdef,
+    #11cdef 6px,
+    #5ee2ff 6px,
+    #5ee2ff 12px
+  );
+}
+.founder-bar-segment--rest {
+  background: #dee2e6;
+  min-width: 2px;
+}
+.founder-legend {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.founder-legend--done {
+  background: linear-gradient(135deg, #2dce89, #54b144);
+}
+.founder-legend--reg {
+  background: #f5365c;
+}
+.founder-legend--cart {
+  background: #11cdef;
+}
+.founder-legend--rest {
+  background: #dee2e6;
+  border: 1px solid #ced4da;
 }
 </style>

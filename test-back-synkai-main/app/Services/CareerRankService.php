@@ -12,20 +12,25 @@ use Illuminate\Support\Facades\Cache;
 class CareerRankService
 {
     /**
-     * PV “grupo” simplificado: PV mensual calificado del usuario + suma de los PV mensuales de sus patrocinados directos.
-     * Sustituible luego por volumen de red completo si el negocio lo modela en BD.
+     * PV “grupo” simplificado para CARRERA/RANGO (histórico, NO reinicia):
+     * - lifetime_qualifying_pv del usuario
+     * - + lifetime_qualifying_pv de sus patrocinados directos (excluye preferred_customer)
+     *
+     * Importante:
+     * - monthly_qualifying_pv se usa para snapshots/bonos mensuales (liderazgo).
+     * - lifetime_qualifying_pv se usa para rangos/carrera (permanente).
      */
     public function groupQualifyingPvLight(User $user): string
     {
         // Regla: clientes preferentes NO cuentan para rangos/bonos de red.
         // Solo sumar directos con account_type member (o null legacy).
         $user->loadMissing('referrals');
-        $sum = bcadd((string) ($user->monthly_qualifying_pv ?? '0'), '0', 4);
+        $sum = bcadd((string) ($user->lifetime_qualifying_pv ?? '0'), '0', 4);
         foreach ($user->referrals as $r) {
             if ($r->isPreferredCustomer()) {
                 continue;
             }
-            $sum = bcadd($sum, (string) ($r->monthly_qualifying_pv ?? '0'), 4);
+            $sum = bcadd($sum, (string) ($r->lifetime_qualifying_pv ?? '0'), 4);
         }
 
         return bcadd($sum, '0', 2);
@@ -81,7 +86,7 @@ class CareerRankService
         }
 
         $minPersonal = (string) ($cfg['min_personal_pv'] ?? '0');
-        $personal = (string) ($user->monthly_qualifying_pv ?? '0');
+        $personal = (string) ($user->lifetime_qualifying_pv ?? '0');
         if (bccomp($personal, $minPersonal, 2) < 0) {
             return false;
         }

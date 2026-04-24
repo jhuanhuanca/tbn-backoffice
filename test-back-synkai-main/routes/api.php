@@ -59,7 +59,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me/referrals', [MeController::class, 'referrals']);
     Route::get('/me/unilevel-tree', [MeController::class, 'unilevelTree']);
     Route::get('/me/commissions', [MeController::class, 'commissions']);
+    Route::get('/me/notifications', [MeController::class, 'notifications']);
+    Route::delete('/me/notifications', [MeController::class, 'dismissNotifications']);
     Route::get('/me/binary-tree', [MeController::class, 'binaryTree']);
+    Route::get('/me/binary-tree/children', [MeController::class, 'binaryTreeChildren']);
+    Route::get('/me/binary-tree/search', [MeController::class, 'binaryTreeSearch']);
+    Route::get('/me/founder', [MeController::class, 'founder']);
+    Route::post('/me/founder/purchase', [MeController::class, 'founderPurchase']);
     Route::put('/me/profile', [AccountController::class, 'updateProfile']);
     Route::put('/me/password', [AccountController::class, 'changePassword']);
     Route::get('/me/landing', [AccountController::class, 'getLanding']);

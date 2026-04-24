@@ -462,6 +462,7 @@ import {
   fetchSupportTickets,
   createSupportTicket,
 } from "@/services/me";
+import { getEffectiveRankName } from "@/utils/mlm";
 import { labelCountry } from "@/constants/latamCountries";
 
 const LATAM_MONEDAS = [
@@ -592,11 +593,7 @@ export default {
       if (!localStorage.getItem("token")) return;
       try {
         const u = await fetchProfile();
-        const rango =
-          u.rank_name ||
-          u.computed_rank?.name ||
-          u.rank?.name ||
-          "";
+        const rango = getEffectiveRankName(u);
         this.perfil = {
           nombre: u.name || "",
           username: (u.email && u.email.split("@")[0]) || "",

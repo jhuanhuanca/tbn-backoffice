@@ -81,8 +81,13 @@ class Order extends Model
         $this->loadMissing('items');
         $sum = '0';
         foreach ($this->items as $item) {
-            if ($item->commissionable_pv !== null && $item->commissionable_pv !== '') {
-                $sum = bcadd($sum, (string) $item->commissionable_pv, 4);
+            $comm = $item->commissionable_pv !== null && $item->commissionable_pv !== ''
+                ? (string) $item->commissionable_pv
+                : '';
+            // Defensa: algunos ítems legacy guardaron "0" en commissionable_pv (ej. líneas fundador).
+            // Si no es positivo, usamos pv_points.
+            if ($comm !== '' && is_numeric($comm) && bccomp($comm, '0', 4) === 1) {
+                $sum = bcadd($sum, $comm, 4);
             } else {
                 $sum = bcadd($sum, (string) $item->pv_points, 4);
             }
@@ -97,6 +102,7 @@ class Order extends Model
     public static function sumCommissionablePvForUserBetween(int $userId, Carbon $start, Carbon $end): string
     {
         $sum = '0';
+        /** @var \Illuminate\Database\Eloquent\Collection<int, self> $orders */
         $orders = static::query()
             ->where('user_id', $userId)
             ->where('estado', 'completado')
@@ -105,6 +111,7 @@ class Order extends Model
             ->get();
 
         foreach ($orders as $order) {
+            /** @var self $order */
             $sum = bcadd($sum, $order->commissionablePvTotal(), 2);
         }
 

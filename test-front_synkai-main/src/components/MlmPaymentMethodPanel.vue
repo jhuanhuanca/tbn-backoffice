@@ -1,11 +1,13 @@
 <script setup>
 /**
- * Panel reutilizable de medios de pago MLM (UI + simulación cliente).
- * Los datos bancarios/QR son de demostración: sustituir por los reales desde API o .env en producción.
+ * Panel reutilizable de medios de pago MLM (UI).
  */
 import { ref, computed, watch } from "vue";
 import { SHIPPING_NOTICE_TEXT } from "@/constants/shippingNotice";
 import { REGISTRATION_PAYMENT_METHODS } from "@/constants/registrationPayments";
+import qrImageUrl from "@/assets/img/QRimage.jpeg";
+
+const qrSrc = computed(() => (typeof qrImageUrl === "string" ? qrImageUrl : qrImageUrl?.default || ""));
 
 const props = defineProps({
   /** Valor del método seleccionado (mismo esquema que REGISTRATION_PAYMENT_METHODS). */
@@ -65,7 +67,7 @@ const paymentOptions = REGISTRATION_PAYMENT_METHODS;
     <div class="card-body p-3 p-md-4">
       <h6 class="text-dark font-weight-bolder mb-1">{{ title }}</h6>
       <p class="text-xs text-secondary mb-3">
-        Completa según el método elegido. En producción enlaza aquí tu pasarela, QR real y cuentas oficiales.
+        Completa según el método elegido.
       </p>
 
       <div v-if="showMethodSelect" class="mb-3">
@@ -84,14 +86,13 @@ const paymentOptions = REGISTRATION_PAYMENT_METHODS;
 
       <!-- Transferencia -->
       <div v-if="method === 'transferencia'" class="mlm-pay-section rounded-3 p-3 bg-light">
-        <p class="text-sm font-weight-bold mb-2">Transferencia bancaria (datos demo)</p>
+        <p class="text-sm font-weight-bold mb-2">Transferencia bancaria</p>
         <ul class="text-sm mb-3 ps-3 mb-0">
           <li><strong>Banco:</strong> Banco Unión</li>
           <li><strong>N° cuenta:</strong> 1234567890</li>
-          <li><strong>Titular:</strong> Empresa Demo MLM</li>
+          <li><strong>Titular:</strong> Empresa</li>
         </ul>
         <p class="text-xs text-muted mb-2">
-          <!-- Reemplazar cuenta por la cuenta corriente real de la empresa -->
           Después de transferir, sube el comprobante (captura o PDF).
         </p>
         <label class="form-label text-xs">Comprobante</label>
@@ -101,22 +102,9 @@ const paymentOptions = REGISTRATION_PAYMENT_METHODS;
 
       <!-- QR -->
       <div v-else-if="method === 'qr'" class="mlm-pay-section rounded-3 p-3 bg-light text-center">
-        <p class="text-sm font-weight-bold mb-2">Pago QR (imagen de demostración)</p>
-        <!-- Sustituir por imagen QR generada desde backend o pasarela -->
+        <p class="text-sm font-weight-bold mb-2">Pago QR</p>
         <div class="d-inline-block p-2 bg-white rounded shadow-sm mb-3">
-          <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 100 100" aria-hidden="true">
-            <rect width="100" height="100" fill="#fff" />
-            <g fill="#111">
-              <rect x="8" y="8" width="28" height="28" />
-              <rect x="64" y="8" width="28" height="28" />
-              <rect x="8" y="64" width="28" height="28" />
-              <rect x="44" y="44" width="8" height="8" />
-              <rect x="56" y="44" width="8" height="8" />
-              <rect x="44" y="56" width="8" height="8" />
-              <rect x="68" y="44" width="8" height="8" />
-              <rect x="44" y="68" width="8" height="8" />
-            </g>
-          </svg>
+          <img :src="qrSrc" alt="QR de pago" style="width: 180px; height: 180px; object-fit: contain" />
         </div>
         <label class="form-label text-xs d-block text-start">Adjuntar comprobante de escaneo</label>
         <input type="file" class="form-control form-control-sm" accept="image/*" @change="onReceiptChange" />
@@ -125,7 +113,7 @@ const paymentOptions = REGISTRATION_PAYMENT_METHODS;
 
       <!-- Tarjeta -->
       <div v-else-if="method === 'tarjeta'" class="mlm-pay-section rounded-3 p-3 bg-light">
-        <p class="text-sm font-weight-bold mb-2">Tarjeta débito / crédito (simulación)</p>
+        <p class="text-sm font-weight-bold mb-2">Tarjeta débito / crédito</p>
         <div class="row g-2">
           <div class="col-12">
             <label class="form-label text-xs">Número de tarjeta</label>
@@ -147,11 +135,9 @@ const paymentOptions = REGISTRATION_PAYMENT_METHODS;
             <input v-model="cardExpiry" type="text" class="form-control form-control-sm" placeholder="MM/AA" />
           </div>
         </div>
-        <button type="button" class="btn btn-sm btn-success mt-3" @click="simulateCardOk">
-          Simular confirmación de pago
-        </button>
+        <button type="button" class="btn btn-sm btn-success mt-3" @click="simulateCardOk">Confirmar pago</button>
         <p v-if="cardSimulated" class="text-success text-xs mt-2 mb-0">
-          Pago simulado como aprobado (no se envía a ninguna pasarela).
+          Pago marcado como confirmado.
         </p>
       </div>
 

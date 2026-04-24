@@ -10,6 +10,7 @@ import api from "@/services/api";
 import { fetchSponsorByCode } from "@/services/sponsor";
 import { fetchPackages } from "@/services/me";
 import { LATAM_COUNTRIES } from "@/constants/latamCountries";
+import termsPdfUrl from "@/assets/doc/pdfejemplo.pdf";
 const body = document.getElementsByTagName("body")[0];
 const store = useStore();
 const router = useRouter();
@@ -29,6 +30,7 @@ const sponsorValidated = ref(null);
 const sponsorCheckLoading = ref(false);
 const sponsorError = ref("");
 const terms = ref(false);
+const termsModalOpen = ref(false);
 const error = ref("");
 const loading = ref(false);
 const packagesList = ref([]);
@@ -170,6 +172,10 @@ async function signup() {
     error.value = "Las contraseñas no coinciden.";
     return;
   }
+  if (!["left", "right", "auto"].includes(preferredBinaryLeg.value)) {
+    error.value = "Debes seleccionar una opción de colocación binaria (izquierda, derecha o automático).";
+    return;
+  }
   loading.value = true;
   try {
     if (sponsorReferralCode.value.trim()) {
@@ -193,9 +199,7 @@ async function signup() {
       payload.sponsor_referral_code = sponsorReferralCode.value.trim();
     }
     payload.country_code = countryCode.value;
-    if (preferredBinaryLeg.value) {
-      payload.preferred_binary_leg = preferredBinaryLeg.value;
-    }
+    payload.preferred_binary_leg = preferredBinaryLeg.value;
     if (selectedPackageId.value) {
       payload.registration_package_id = parseInt(String(selectedPackageId.value), 10);
     }
@@ -354,17 +358,7 @@ async function signup() {
                   <label class="form-label text-sm mb-1">Fecha de nacimiento</label>
                   <argon-input v-model="birthDate" id="bd" type="date" placeholder="" />
                 </div>
-                <div class="mb-3">
-                  <label class="form-label text-sm mb-1">Colocación binaria preferida (directo bajo tu patrocinador)</label>
-                  <select v-model="preferredBinaryLeg" class="form-select">
-                    <option value="left">Pierna izquierda</option>
-                    <option value="right">Pierna derecha</option>
-                    <option value="auto">Automático</option>
-                  </select>
-                  <p class="text-xxs text-muted mb-0 mt-1">
-                    Se aplicará al activar la cuenta. Si eliges izquierda/derecha y el cupo está ocupado, podrás escoger otra.
-                  </p>
-                </div>
+           
                 <div class="mb-3">
                   <label class="form-label text-sm mb-1">Contraseña (mín. 8) <span class="text-danger">*</span></label>
                   <div class="input-group">
@@ -399,6 +393,13 @@ async function signup() {
                   <label class="form-check-label text-sm" for="termsMlm">
                     Acepto los términos y condiciones del programa.
                   </label>
+                  <button
+                    type="button"
+                    class="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                    @click="termsModalOpen = true"
+                  >
+                    Ver términos
+                  </button>
                 </div>
 
                 <p v-if="error" class="text-danger mt-2 text-sm">{{ error }}</p>
@@ -434,6 +435,41 @@ async function signup() {
     </div>
   </main>
   <app-footer />
+
+  <div v-if="termsModalOpen" class="modal-backdrop fade show"></div>
+  <div
+    v-if="termsModalOpen"
+    class="modal fade show d-block"
+    tabindex="-1"
+    role="dialog"
+    aria-modal="true"
+    @click.self="termsModalOpen = false"
+  >
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title">Términos y condiciones</h6>
+          <button type="button" class="btn-close" aria-label="Cerrar" @click="termsModalOpen = false" />
+        </div>
+        <div class="modal-body">
+          <p class="text-sm text-dark mb-0" style="white-space: pre-line">
+            Los presentes términos y condiciones regulan el uso de este servicio, por lo que al acceder y utilizarlo,
+            el usuario acepta cumplir con las disposiciones aquí establecidas. El usuario se compromete a hacer un uso
+            adecuado de la plataforma, evitando actividades ilícitas o que puedan afectar su funcionamiento. El
+            proveedor se reserva el derecho de modificar estos términos en cualquier momento, así como de suspender el
+            acceso en caso de incumplimiento. Asimismo, no se garantiza la disponibilidad continua del servicio ni la
+            ausencia de errores, y el uso del mismo es bajo la responsabilidad del usuario.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <a class="btn btn-outline-success btn-sm" :href="termsPdfUrl" download="terminos_y_condiciones.pdf">
+            Descargar PDF
+          </a>
+          <button type="button" class="btn btn-success btn-sm" @click="termsModalOpen = false">Aceptar</button>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
 </template>
 
